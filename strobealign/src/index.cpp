@@ -1,0 +1,572 @@
+//
+//  index.cpp
+//  cpp_course
+//
+//  Created by Kristoffer Sahlin on 4/21/21.
+//
+#include "index.hpp"
+
+#include <math.h>   /* pow */
+#include <fstream>
+#include <cassert>
+#include <algorithm>
+#include "pdqsort/pdqsort.h"
+#include <iostream>
+#include <thread>
+#include <atomic>
+#include "io.hpp"
+#include "timer.hpp"
+#include "logger.hpp"
+#include <sstream>
+
+
+static Logger& logger = Logger::get();
+static const uint32_t STI_FILE_FORMAT_VERSION = 2;
+
+
+namespace {
+
+uint64_t count_randstrobes(const std::string& seq, const IndexParameters& parameters) {
+    uint64_t n_syncmers = 0;
+    SyncmerIterator syncmer_iterator(seq, parameters.syncmer);
+    Syncmer syncmer;
+    while (!(syncmer = syncmer_iterator.next()).is_end()) {
+        n_syncmers++;
+    }
+    // The last w_min syncmers do not result in a randstrobe
+    if (n_syncmers < parameters.randstrobe.w_min) {
+        return 0;
+    } else {
+        return n_syncmers - parameters.randstrobe.w_min;
+    }
+}
+
+std::vector<uint64_t> count_all_randstrobes(const References& references, const IndexParameters& parameters, size_t n_threads) {
+    std::vector<std::thread> workers;
+    std::atomic_size_t ref_index{0};
+
+    std::vector<uint64_t> counts;
+    counts.assign(references.size(), 0);
+
+    for (size_t i = 0; i < n_threads; ++i) {
+        workers.push_back(
+            std::thread(
+                [&ref_index](const References& references, const IndexParameters& parameters, std::vector<uint64_t>& counts) {
+                    while (true) {
+                        size_t j = ref_index.fetch_add(1);
+                        if (j >= references.size()) {
+                            break;
+                        }
+                        counts[j] = count_randstrobes(references.sequences[j], parameters);
+                    }
+                }, std::ref(references), std::ref(parameters), std::ref(counts))
+        );
+    }
+    for (auto& worker : workers) {
+        worker.join();
+    }
+
+    return counts;
+}
+
+}
+
+void StrobemerIndex::write(const std::string& filename) const {
+    std::ofstream ofs(filename, std::ios::binary);
+
+    ofs.write("STI\1", 4); // Magic number
+    write_int_to_ostream(ofs, STI_FILE_FORMAT_VERSION);
+
+    // Variable-length chunk reserved for future use
+    std::vector<char> reserved_chunk{0, 0, 0, 0, 0, 0, 0, 0};
+    write_vector(ofs, reserved_chunk);
+
+    write_int_to_ostream(ofs, filter_cutoff);
+    write_int_to_ostream(ofs, bits);
+    parameters.write(ofs);
+
+    write_vector(ofs, randstrobes);
+    rs_pla_index.Save(ofs);
+    // writing the indices
+    // write_vector(ofs, randstrobe_start_indices);
+    // change to seg-dict
+    // seg_dict.Save(ofs);
+
+    // const std::string point_vec = "strobe_pv.bin";
+    // std::ofstream pfs(point_vec, std::ios::binary);
+    // write_vector(pfs, randstrobe_start_indices);
+
+    const std::string apr_dic = "droso_dic_"+std::to_string(rs_pla_index.get_epsilon())+".bin";
+    std::ofstream afs(apr_dic, std::ios::binary);
+    rs_pla_index.Save(afs);
+    
+}
+
+void StrobemerIndex::read(const std::string& filename) {
+    errno = 0;
+    std::ifstream ifs(filename, std::ios::binary);
+    if (!ifs.is_open()) {
+        throw InvalidIndexFile(filename + ": " + strerror(errno));
+    }
+
+    union {
+        char s[4];
+        uint32_t v;
+    } magic;
+    ifs.read(magic.s, 4);
+    if (magic.v != 0x01495453) { // "STI\1"
+        throw InvalidIndexFile("Index file has incorrect format (magic number mismatch)");
+    }
+
+    uint32_t file_format_version = read_int_from_istream(ifs);
+    if (file_format_version != STI_FILE_FORMAT_VERSION) {
+        std::stringstream s;
+        s << "Can only read index file format version " << STI_FILE_FORMAT_VERSION
+            << ", but found version " << file_format_version;
+        throw InvalidIndexFile(s.str());
+    }
+
+    // Skip over variable-length chunk reserved for future use
+    randstrobe_hash_t reserved_chunk_size;
+    ifs.read(reinterpret_cast<char*>(&reserved_chunk_size), sizeof(reserved_chunk_size));
+    ifs.seekg(reserved_chunk_size, std::ios_base::cur);
+
+    filter_cutoff = read_int_from_istream(ifs);
+    bits = read_int_from_istream(ifs);
+    const IndexParameters sti_parameters = IndexParameters::read(ifs);
+    if (parameters != sti_parameters) {
+        throw InvalidIndexFile("Index parameters in .sti file and those specified on command line differ");
+    }
+
+    read_vector(ifs, randstrobes);
+    rs_pla_index.Load(ifs, randstrobes);
+    // read_vector(ifs, randstrobe_start_indices);
+    // if (randstrobe_start_indices.size() != (1u << bits) + 1) {
+    //     throw InvalidIndexFile("randstrobe_start_indices vector is of the wrong size");
+    // }
+}
+
+/* Pick a suitable number of bits for indexing randstrobe start indices */
+int StrobemerIndex::pick_bits(size_t size) const {
+    size_t estimated_number_of_randstrobes = size / (parameters.syncmer.k - parameters.syncmer.s + 1);
+    // Two randstrobes per bucket on average
+    return std::clamp(static_cast<int>(log2(estimated_number_of_randstrobes)) - 1, 8, 31);
+}
+
+size_t StrobemerIndex::find(randstrobe_hash_t key) const {
+    // logger.debug()<<" Find Key "<<key<<"\n";
+    // return rs_pla_index.QueryKmer(randstrobes, key);
+    return rs_pla_index.query(randstrobes, key);
+    /*
+    uint64_t seg_res = rs_pla_index.query(randstrobes, key);
+    // logger.debug()<<"position: "<<seg_res<<"\n";
+    
+    constexpr int MAX_LINEAR_SEARCH = 4;
+    const unsigned int top_N = key >> (64 - bits);
+    bucket_index_t position_start = randstrobe_start_indices[top_N];
+    bucket_index_t position_end = randstrobe_start_indices[top_N + 1];
+    if (position_start == position_end) {
+        if(seg_res != end()){
+            string err = "1. seg not equal seg_res: "+to_string(seg_res)
+                    +" end: "+to_string(end()) +" key: "+to_string(key);
+            throw BadParameter(err.c_str());
+        }
+        return end();
+    }
+
+    if (position_end - position_start < MAX_LINEAR_SEARCH) {
+        for ( ; position_start < position_end; ++position_start) {
+            if (randstrobes[position_start].hash == key){
+                if(seg_res != position_start){
+                    string err = "2. seg not equal end: "+to_string(seg_res)+" "+to_string(position_start);
+                    throw BadParameter(err.c_str());
+                }
+                return position_start;
+            }
+            if (randstrobes[position_start].hash > key) {
+                if(seg_res != end()){
+                    string err = "3. seg not equal seg_res: "+to_string(seg_res)
+                    +" end: "+to_string(end()) +" key: "+to_string(key)
+                    +" \npos_start: "+to_string(position_start)
+                    +" hash: "+to_string(randstrobes[position_start].hash)
+                    +" top_n: "+to_string(top_N);
+                    throw BadParameter(err.c_str());
+                }
+                return end();
+            }
+        }
+        if(seg_res != end()){
+            string err = "4. seg not equal end: res: "+to_string(seg_res)+" "+to_string(end());
+            throw BadParameter(err.c_str());
+        }
+        return end();
+    }
+    auto cmp = [](const RefRandstrobe lhs, const RefRandstrobe rhs) {return lhs.hash < rhs.hash; };
+
+    auto pos = std::lower_bound(randstrobes.begin() + position_start,
+                                            randstrobes.begin() + position_end,
+                                            RefRandstrobe{key, 0, 0},
+                                            cmp);
+    if (pos->hash == key) {
+        if(seg_res != pos - randstrobes.begin()){
+            string err = "5. seg not equal end: "+to_string(key)+" "+to_string(seg_res)+" "+to_string(pos - randstrobes.begin());
+            throw BadParameter(err.c_str());
+        }
+        return pos - randstrobes.begin();
+    }
+    if(seg_res != end()){
+        string err = "6. seg not equal end: "+to_string(seg_res)+" "+to_string(end());
+        throw BadParameter(err.c_str());
+    }
+    return end();*/
+}
+
+unsigned int StrobemerIndex::get_count(bucket_index_t position) const {
+    // For 95% of cases, the result will be small and a brute force search
+    // is the best option. Once, we go over MAX_LINEAR_SEARCH, though, we
+    // use a binary search to get the next position
+    // In the human genome, if we assume that the frequency 
+    // a hash will be queried is proportional to the frequency it appears in the table, 
+    // with MAX_LINEAR_SEARCH=8, the actual value will be 96%.
+    // logger.debug()<<"count: "<<endl;
+    // uint64_t last_pos = seg_dict.GetLast(randstrobes, randstrobes[position].hash);
+    // logger.debug()<<"last pos: "<<last_pos<<endl;
+    // uint64_t seg_count = last_pos - position + 1;
+    // logger.debug()<<"count val: "<<seg_count<<endl;
+    uint64_t lastPos = position + 1;
+    uint64_t seg_count = 1;
+    uint64_t query_hash = randstrobes[position].hash;
+    while(randstrobes[lastPos++].hash == query_hash) seg_count++;
+    return seg_count;
+    // return seg_dict.GetCount(randstrobes, position);
+    
+    // uint64_t seg_count = seg_dict.GetCount(randstrobes, position);
+    // return seg_count;
+    
+    /*constexpr unsigned int MAX_LINEAR_SEARCH = 8;
+    const auto key = randstrobes[position].hash;
+    const unsigned int top_N = key >> (64 - bits);
+    bucket_index_t position_end = randstrobe_start_indices[top_N + 1];
+    uint64_t count = 1;
+
+    if (position_end - position < MAX_LINEAR_SEARCH) {
+        for (bucket_index_t position_start = position + 1; position_start < position_end; ++position_start) {
+            if (randstrobes[position_start].hash == key){
+                count += 1;
+            }
+            else{
+                break;
+            }
+        }
+        if(seg_count != count){
+            string err = "1. get count not equal: seg_count: "+to_string(seg_count)+" act: "+to_string(count)+"\npos: "
+                + to_string(position);
+                // +" last pos: "+to_string(last_pos);
+            throw BadParameter(err.c_str());
+        }
+        return count;
+    }
+    auto cmp = [](const RefRandstrobe lhs, const RefRandstrobe rhs) {return lhs.hash < rhs.hash; };
+
+    auto pos = std::upper_bound(randstrobes.begin() + position,
+                                            randstrobes.begin() + position_end,
+                                            RefRandstrobe{key, 0, 0},
+                                            cmp);
+    if(seg_count != (pos - randstrobes.begin() - 1) - position + 1){
+        string err = "2. get count not equal: "+to_string(seg_count)+" "+to_string((pos - randstrobes.begin() - 1) - position + 1)+"\npos: "
+                + to_string(position);
+                // +" last pos: "+to_string(last_pos);
+        throw BadParameter(err.c_str());
+    }
+    return (pos - randstrobes.begin() - 1) - position + 1;*/
+    
+}
+
+void StrobemerIndex::populate(float f, size_t n_threads) {
+    Timer count_hash;
+    auto randstrobe_counts = count_all_randstrobes(references, parameters, n_threads);
+    stats.elapsed_counting_hashes = count_hash.duration();
+
+    uint64_t total_randstrobes = 0;
+    for (auto& count : randstrobe_counts) {
+        total_randstrobes += count;
+    }
+    stats.tot_strobemer_count = total_randstrobes;
+
+    logger.debug() << "  Total number of randstrobes: " << total_randstrobes << '\n';
+    uint64_t memory_bytes = references.total_length() + sizeof(RefRandstrobe) * total_randstrobes + sizeof(bucket_index_t) * (1u << bits);
+    logger.debug() << "  Estimated total memory usage: " << memory_bytes / 1E9 << " GB\n";
+
+    if (total_randstrobes > std::numeric_limits<bucket_index_t>::max()) {
+        throw std::range_error("Too many randstrobes");
+    }
+    Timer randstrobes_timer;
+    logger.debug() << "  Generating randstrobes ...\n";
+    randstrobes.assign(total_randstrobes, RefRandstrobe{0, 0, 0});
+    assign_all_randstrobes(randstrobe_counts, n_threads);
+    stats.elapsed_generating_seeds = randstrobes_timer.duration();
+
+    Timer sorting_timer;
+    logger.debug() << "  Sorting ...\n";
+    // sort by hash values
+    pdqsort_branchless(randstrobes.begin(), randstrobes.end());
+    stats.elapsed_sorting_seeds = sorting_timer.duration();
+
+    // segment dictionary operation    
+    // vector<uint64_t> test_vec(randstrobes.size());
+    // for(size_t i=0; i<randstrobes.size(); i++){
+    //     test_vec[i] = randstrobes[i].hash;
+    // }
+    
+    // for(size_t i=0; i<randstrobes.size(); i++){
+    //     if(test_vec[i] != randstrobes[i].hash){
+    //         logger.debug()<<" Mismatch "<<i<<" "<<test_vec[i]
+    //             <<" "<<randstrobes[i].hash<<"\n";
+    //             exit(-1);
+    //     }
+    // }
+
+    
+    logger.debug() << "  Indexing ...\n";
+    Timer hash_index_timer;    
+    rs_pla_index.build_rep_stretch_pla_index_strobe(randstrobes);
+    stats.elapsed_hash_index = hash_index_timer.duration();
+
+    uint64_t tot_high_ab = 0;
+    uint64_t tot_mid_ab = 0;
+    std::vector<uint64_t> strobemer_counts;
+
+    stats.tot_occur_once = 0;
+    // randstrobe_start_indices.reserve((1u << bits) + 1);
+
+    uint64_t unique_mers = randstrobes.empty() ? 0 : 1;
+    randstrobe_hash_t prev_hash = randstrobes.empty() ? 0 : randstrobes[0].hash;
+    unsigned int count = 1;
+    // first randstrobe index will always be the 0
+    // if(!randstrobes.empty()) {
+    //     randstrobe_start_indices.push_back(0);
+    // }
+    for (bucket_index_t position = 1; position < randstrobes.size(); ++position) {
+        const randstrobe_hash_t cur_hash = randstrobes[position].hash;
+        if (cur_hash == prev_hash) { 
+            ++count;
+            continue;
+        }
+
+        ++unique_mers;
+
+        if (count == 1) {
+            ++stats.tot_occur_once;
+        } else {
+            if (count > 100) {
+                ++tot_high_ab;
+            } else {
+                ++tot_mid_ab;
+            }
+            strobemer_counts.push_back(count);
+        }
+        count = 1;
+        // just comment the following 3 lines
+        // const unsigned int cur_hash_N = cur_hash >> (64 - bits);
+        // while (randstrobe_start_indices.size() <= cur_hash_N) {
+        //     randstrobe_start_indices.push_back(position);
+        // }
+        prev_hash = cur_hash;
+    }
+    // wrap up last entry
+    if (count == 1) {
+        ++stats.tot_occur_once;
+    } else {
+        if (count > 100) {
+            tot_high_ab++;
+        } else {
+            tot_mid_ab++;
+        }
+        strobemer_counts.push_back(count);
+    }
+    // just comment the following 3 lines
+    // while (randstrobe_start_indices.size() < ((1u << bits) + 1)) {
+    //     randstrobe_start_indices.push_back(randstrobes.size());
+    // }
+    // randstrobe_start_indices_done
+
+    stats.tot_high_ab = tot_high_ab;
+    stats.tot_mid_ab = tot_mid_ab;
+
+    std::sort(strobemer_counts.begin(), strobemer_counts.end(), std::greater<int>());
+
+    uint64_t index_cutoff = unique_mers * f;
+    stats.index_cutoff = index_cutoff;
+    if (!strobemer_counts.empty()){
+        filter_cutoff = index_cutoff < strobemer_counts.size() ?  strobemer_counts[index_cutoff] : strobemer_counts.back();
+        filter_cutoff = std::max(30U, filter_cutoff); // cutoff is around 30-50 on hg38. No reason to have a lower cutoff than this if aligning to a smaller genome or contigs.
+        filter_cutoff = std::min(100U, filter_cutoff); // limit upper cutoff for normal NAM finding - use rescue mode instead
+    } else {
+        filter_cutoff = 30;
+    }
+    stats.filter_cutoff = filter_cutoff;
+    
+    stats.distinct_strobemers = unique_mers;
+
+    // seg_dict.BuildDictionary_opt(randstrobes);
+}
+
+void StrobemerIndex::check(){
+    // logger.debug()<<"Checking...\n";
+    // uint64_t pos = find(275679556624);
+    // uint64_t count = get_count(pos);
+    for(uint64_t i=0; i<randstrobes.size(); i++){
+        uint64_t pos = find(randstrobes[i].hash);
+        // uint64_t count = get_count(pos);
+    }
+    // logger.debug()<<"Check complete\n";
+    // exit(0);
+}
+
+void StrobemerIndex::assign_all_randstrobes(const std::vector<uint64_t>& randstrobe_counts, size_t n_threads) {
+    // Compute offsets
+    std::vector<size_t> offsets;
+    size_t offset = 0;
+    for (size_t ref_index = 0; ref_index < references.size(); ++ref_index) {
+        offsets.push_back(offset);
+        offset += randstrobe_counts[ref_index];
+    }
+
+    std::vector<std::thread> workers;
+    std::atomic_size_t ref_index{0};
+    for (size_t i = 0; i < n_threads; ++i) {
+        workers.push_back(
+            std::thread(
+                [&]() {
+                    while (true) {
+                        size_t j = ref_index.fetch_add(1);
+                        if (j >= references.size()) {
+                            break;
+                        }
+                        assign_randstrobes(j, offsets[j]);
+                    }
+                })
+        );
+    }
+    for (auto& worker : workers) {
+        worker.join();
+    }
+}
+
+/*
+ * Compute randstrobes of one reference and assign them to the randstrobes
+ * vector starting from the given offset
+ */
+void StrobemerIndex::assign_randstrobes(size_t ref_index, size_t offset) {
+    auto& seq = references.sequences[ref_index];
+    if (seq.length() < parameters.randstrobe.w_max) {
+        return;
+    }
+    RandstrobeGenerator randstrobe_iter{seq, parameters.syncmer, parameters.randstrobe};
+    std::vector<Randstrobe> chunk;
+    // TODO
+    // Chunking makes this function faster, but the speedup is achieved even
+    // with a chunk size of 1.
+    const size_t chunk_size = 4;
+    chunk.reserve(chunk_size);
+    bool end = false;
+    while (!end) {
+        // fill chunk
+        Randstrobe randstrobe;
+        while (chunk.size() < chunk_size) {
+            randstrobe = randstrobe_iter.next();
+            if (randstrobe == randstrobe_iter.end()) {
+                end = true;
+                break;
+            }
+            chunk.push_back(randstrobe);
+        }
+        for (auto randstrobe : chunk) {
+            RefRandstrobe::packed_t packed = ref_index << 8;
+            packed = packed + (randstrobe.strobe2_pos - randstrobe.strobe1_pos);
+            randstrobes[offset++] = RefRandstrobe{randstrobe.hash, randstrobe.strobe1_pos, packed};
+        }
+        chunk.clear();
+    }
+}
+
+void StrobemerIndex::print_diagnostics(const std::string& logfile_name, int k) const {
+    // Prins to csv file the statistics on the number of seeds of a particular length and what fraction of them them are unique in the index:
+    // format:
+    // seed_length, count, percentage_unique
+
+    size_t max_size = 100000;
+    std::vector<int> log_count(max_size, 0);  // stores count and each index represents the length
+    std::vector<int> log_unique(max_size, 0);  // stores count unique and each index represents the length
+    std::vector<int> log_repetitive(max_size, 0);  // stores count unique and each index represents the length
+
+
+    std::vector<randstrobe_hash_t> log_count_squared(max_size,0);
+    randstrobe_hash_t tot_seed_count = 0;
+    randstrobe_hash_t tot_seed_count_sq = 0;
+
+    std::vector<randstrobe_hash_t> log_count_1000_limit(max_size, 0);  // stores count and each index represents the length
+    randstrobe_hash_t tot_seed_count_1000_limit = 0;
+
+    size_t seed_length = 0;
+
+    for (size_t it = 0; it < randstrobes.size(); it++) {
+        seed_length = strobe2_offset(it) + k;
+        auto count = get_count(it);
+
+        if (seed_length < max_size){
+            log_count[seed_length] ++;
+            log_count_squared[seed_length] += count;
+            tot_seed_count ++;
+            tot_seed_count_sq += count;
+            if (count <= 1000){
+                log_count_1000_limit[seed_length] ++;
+                tot_seed_count_1000_limit ++;
+            }
+        } else {
+            // TODO This function should not log anything
+            // logger.info() << "Detected seed size over " << max_size << " bp (can happen, e.g., over centromere): " << seed_length << std::endl;
+        }
+
+        if (count == 1 && seed_length < max_size) {
+            log_unique[seed_length]++;
+        }
+        if (count >= 10 && seed_length < max_size) {
+            log_repetitive[seed_length]++;
+        }
+    }
+
+    // printing
+    std::ofstream log_file;
+    log_file.open(logfile_name);
+
+    for (size_t i = 0; i < log_count.size(); ++i) {
+        if (log_count[i] > 0) {
+            double e_count = log_count_squared[i] / log_count[i];
+            log_file << i << ',' << log_count[i] << ',' << e_count << std::endl;
+        }
+    }
+
+    // Get median
+    size_t n = 0;
+    int median = 0;
+    for (size_t i = 0; i < log_count.size(); ++i) {
+        n += log_count[i];
+        if (n >= tot_seed_count/2) {
+            break;
+        }
+    }
+    // Get median 1000 limit
+    size_t n_lim = 0;
+    for (size_t i = 0; i < log_count_1000_limit.size(); ++i) {
+        n_lim += log_count_1000_limit[i];
+        if (n_lim >= tot_seed_count_1000_limit/2) {
+            break;
+        }
+    }
+
+    log_file << "E_size for total seeding wih max seed size m below (m, tot_seeds, E_hits)" << std::endl;
+    double e_hits = (double) tot_seed_count_sq/ (double) tot_seed_count;
+    double fraction_masked = 1.0 - (double) tot_seed_count_1000_limit/ (double) tot_seed_count;
+    log_file << median << ',' << tot_seed_count << ',' << e_hits << ',' << 100*fraction_masked << std::endl;
+}

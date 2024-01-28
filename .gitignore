@@ -1,2 +1,4 @@
 Dataset/
 executables/
+strobealign/build/
+strobealign/*.bam

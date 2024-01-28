@@ -1,0 +1,12 @@
+#fetching mason
+wget http://packages.seqan.de/mason2/
+https://www.seqan.de/apps/mason.html
+https://github.com/seqan/seqan/tree/main/apps/mason2
+# check out the read me files
+
+#creating vcf files for variation
+mason_variator --sv-indel-rate 0.000005 --snp-rate 0.001 --small-indel-rate 0.0001 --max-small-indel-size 50 -ir adeno_virus.fa -ov adeno_out.vcf
+
+# paired end read simulator
+mason_simulator -ir adeno_virus.fa -iv adeno_out.vcf -o reads.adeno.1.fq -or reads.adeno.2.fq --illumina-read-length 150 -n 10000
+
