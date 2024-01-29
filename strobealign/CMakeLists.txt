@@ -69,8 +69,8 @@ add_library(salib STATIC ${SOURCES}
   ext/ssw/ssw_cpp.cpp
   ext/ssw/ssw.c
 )
-target_include_directories(salib PUBLIC src/ ext/ ~/include ${PROJECT_BINARY_DIR})
-target_link_directories(salib PUBLIC ~/lib/)
+target_include_directories(salib PUBLIC src/ ext/ /home/hasin/include ${PROJECT_BINARY_DIR}) 
+target_link_directories(salib PUBLIC /home/hasin/lib) 
 target_link_libraries(salib PUBLIC ZLIB::ZLIB Threads::Threads zstr::zstr sdsl divsufsort divsufsort64)
 IF(ENABLE_AVX)
   target_compile_options(salib PUBLIC "-mavx2")

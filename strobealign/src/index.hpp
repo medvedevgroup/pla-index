@@ -38,7 +38,7 @@ struct IndexCreationStatistics {
 
 struct StrobemerIndex {
     using bucket_index_t = uint64_t;
-    StrobemerIndex(const References& references, const IndexParameters& parameters, int bits=-1, int eps)
+    StrobemerIndex(const References& references, const IndexParameters& parameters, int bits=-1, int eps=15)
         : filter_cutoff(0)
         , parameters(parameters)
         , references(references)

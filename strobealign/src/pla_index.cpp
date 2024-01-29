@@ -396,7 +396,7 @@ void pla_index::build_rep_stretch_pla_index_strobe(const vector<RefRandstrobe> &
     brk_sa_indx_vec.emplace_back((uint64_t)knot_ei);
     brk_diff_vec.emplace_back(0);
 
-    logger.debug()<<"dic size: "<<dic_size<<endl;
+    logger.debug()<<"#segments: "<<dic_size<<endl;
 
     sdsl::dac_vector_dp<> temp(brk_diff_vec);
     sa_diff_dac_vec = temp;
@@ -450,7 +450,7 @@ void pla_index::Load(std::istream& is, const vector<RefRandstrobe> &randstrobes)
     // cout<<"#breakpoints: "<<dic_size<<endl;
     // brk_uniform_diff_packed.Load(fp, dic_size);
     brk_uniform_diff_packed.Load_is(is, dic_size);
-    if (total_bits == 64) max_data_ratio = ~UINT64_C(0);
+    if (total_bits == 64) max_data_ratio = ~UINT64_C(0)/(dic_size - 1);
     else max_data_ratio = ((1ULL << total_bits) - 1)/(dic_size-1);
     
     sa_diff_dac_vec.load(is);

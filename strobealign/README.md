@@ -119,6 +119,7 @@ intermediate files are created.
 Please run `strobealign --help` to see the most up-to-date list of command-line
 options. Some important ones are:
 
+* `--eps INT`: Epsilon. What epsilon value to use in constructing pla-index. (Default: 15)
 * `-r`: Mean read length. If given, this overrides the read length estimated
   from the input file(s). This is usually only required in combination with
   `--create-index`, see [index files](#index-files).
