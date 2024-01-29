@@ -12,30 +12,29 @@ void LoadQuery(const std::string &query_file, std::vector<std::string>& query_km
     int indx = 0;
     
     while(getline(queryFile, line)){
-        if(indx == 1){
+        // if(indx == 1){
             std::stringstream ss(line);
             ss >> kmer;
             query_kmers_vec.emplace_back(kmer);
             query_kmerVals.emplace_back(sa.GetKmerVal(kmer));
-        }
-        indx++;
-        indx %= 4;
+        // }
+        // indx++;
+        // indx %= 4;
     }
     queryFile.close();
 }
 
 int main(int argc, char **argv){
-    string sa_fn = argv[1];
-    string gn_fn = argv[2];
+    string gn_fn = argv[1];
+    string sa_fn = argv[2];
     int64_t kmer_size = stoll(argv[3]);
     string query_fn = argv[4];
     string indx_fn = argv[5];
     string runInfo_fn = argv[6];
-    int64_t knot_bs_thres = stoi(argv[7]);
-    string indx_type = argv[8];
-    string query_type = argv[9];
+    string indx_type = argv[7];
+    string query_type = argv[8];
     // int64_t eps = stoi(argv[10]);
-
+    int64_t knot_bs_thres = 64;
     bool isFirstIndexReturned;
 
     if (query_type == "search") isFirstIndexReturned = false;

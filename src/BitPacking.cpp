@@ -155,46 +155,7 @@ void CBitPacking::BuilidSignedPackedVector(vector<int64_t> &dataVec){
     }
     m_sign_mask = ~UINT64_C(0) >> (64 - m_iPacketSize + 1);
 }
-/*
-void CBitPacking::BuilidSignedPackedVector(vector<int64_t> &dataVec){
-    int64_t _max = *max_element(dataVec.begin(), dataVec.end());
-    int64_t _min = *min_element(dataVec.begin(), dataVec.end());
-    if(_min < 0) _min *= -1;
-    uint64_t max_elem = max(_max, _min);
 
-    m_iNumElements = dataVec.size();
-    if(ceil(log2(max_elem)) != floor(log2(max_elem)))
-        m_iPacketSize = ceil(log2(max_elem)) + 1; // + 1 for sign bit
-    else
-        m_iPacketSize = ceil(log2(max_elem)) + 2; // +2 for sign bit and main value is a power of 2
-    // m_iPacketSize = ceil(log2(max_elem))+1; // +1 for sign bit
-    m_iPacketDataSize = GetPacketDataSize();
-    // cout<<"pcktData: "<<m_iPacketDataSize<<endl;
-    m_vPackedData.resize(m_iPacketDataSize, 0);
-    m_iLastIndex = 0;
-    m_iLastPosition = 0;
-    
-    uint64_t data;
-    bool isNeg;
-    uint64_t put_sign_mask = (uint64_t) 1<< (m_iPacketSize-1);
-    uint64_t rmv_sign_bitmask = (uint64_t)1<<63;
-    rmv_sign_bitmask -= 1;
-    int64_t val;
-    for(size_t i=0; i<dataVec.size(); i++){
-        isNeg = false;
-        val = dataVec[i];
-        if(val < 0){
-            isNeg = true;
-            val*=-1;
-        } 
-        data = val & rmv_sign_bitmask;
-        if(isNeg) data |= put_sign_mask;
-        
-        SetBits(data);
-    }
-    m_sign_mask = ~UINT64_C(0) >> (64 - m_iPacketSize + 1);
-}
-*/
 void CBitPacking::SetBits(uint64_t value){    
     int64_t mask;
     if(64-m_iLastPosition >= m_iPacketSize){
@@ -277,62 +238,3 @@ int64_t CBitPacking::GetValueAt(uint64_t pckt) const {
 
     return isNegative ? -actualVal : actualVal;
 }
-
-
-/*
-int64_t CBitPacking::GetValueAt(uint64_t pckt) const{
-    uint64_t packedDataIndex = (pckt*m_iPacketSize)>>6; // div 2^6 = 64
-    uint64_t value, packedValue, elementPos, mask;
-    
-    if((pckt+1)*m_iPacketSize <= ((packedDataIndex+1)<<6) ){ // mul 2^6 = 64
-        // full packet is inside one vector element
-        // cout<<"Inside one, psize: "<<m_iPacketSize<<endl;
-        packedValue = m_vPackedData[packedDataIndex];
-        //exact start position of the value
-        elementPos = pckt*m_iPacketSize - packedDataIndex*64;
-        if (elementPos == 0) mask = -1;
-        else{
-            mask = ((uint64_t) 1 << (64- elementPos)) -1;
-        }
-        // cout<<elementPos<<" "<<mask<<" "<<endl;
-        value = packedValue & mask;
-        // cout<<"Val "<<value<<endl;
-        value >>= (64 - elementPos - m_iPacketSize);
-        // cout<<"Val "<<value<<endl;
-    }   
-    else{
-        // some part is in curr element and rest is in the next
-        packedValue = m_vPackedData[packedDataIndex];
-        elementPos = pckt*m_iPacketSize - packedDataIndex*64;
-        mask = ((uint64_t)1 << (64 - elementPos)) - 1;
-        
-        // bitset<64> x(mask);
-        // cout<<x<<endl;
-        
-        value = packedValue & mask;
-        
-        // cout<<bitset<64>(value)<<endl;
-        
-        uint32_t remBits = m_iPacketSize - (64 - elementPos);
-        packedValue = m_vPackedData[packedDataIndex + 1];
-
-        // cout<<bitset<64>(packedValue)<<endl;
-
-        mask = packedValue >> (64 - remBits);
-
-        // cout<<bitset<64>(mask)<<endl;
-
-        value <<= (remBits);
-
-        // cout<<bitset<64>(value)<<endl;
-
-        value |= mask;
-    }
-    if(!m_bIsDataSigned) return value;
-    int64_t isNegative = value >> (m_iPacketSize-1);
-    uint64_t val_mask = ((uint64_t)1<<(m_iPacketSize-1)) -1;
-    int64_t actual_val = value & val_mask;
-    if(isNegative) return actual_val*-1;
-    return actual_val;
-}
-*/

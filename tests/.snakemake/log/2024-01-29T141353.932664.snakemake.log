@@ -1,0 +1,55 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 1 (use --cores to define parallelism)
+Rules claiming more threads will be scaled down.
+Job stats:
+job                 count    min threads    max threads
+----------------  -------  -------------  -------------
+all                     1              1              1
+benchmark               1              1              1
+build_dictionary        1              1              1
+total                   3              1              1
+
+Select jobs to execute...
+
+[Mon Jan 29 14:13:54 2024]
+rule build_dictionary:
+    input: ecoli/ecoli.ConcatenatedGenome.txt, ecoli/ecoli.sa.bin
+    output: ecoli/ecoli.index_basic-pla_15_21_rns.bin
+    jobid: 1
+    reason: Missing output files: ecoli/ecoli.index_basic-pla_15_21_rns.bin
+    wildcards: fn=ecoli
+    resources: tmpdir=/tmp
+
+g++ -std=c++17 -Ofast -mbmi2 -msse4.2 -DNDEBUG -march=native -I ~/include -L ~/lib ../src//build_index.cpp ../src//BitPacking.cpp ../src//pla_index.cpp -o ../executables//build_index -lsdsl -ldivsufsort -ldivsufsort64;/usr/bin/time -f "%M,%e,%U,%S" --output-file=memkb_sec_Usec_Ksec_dict_build.txt ../executables//build_index ecoli/ecoli.ConcatenatedGenome.txt ecoli/ecoli.sa.bin 21 15 ecoli/ecoli.index_basic-pla_15_21_rns.bin 16 basic-pla search 
+[Mon Jan 29 14:14:00 2024]
+Finished job 1.
+1 of 3 steps (33%) done
+Select jobs to execute...
+
+[Mon Jan 29 14:14:00 2024]
+rule benchmark:
+    input: ecoli/ecoli.index_basic-pla_15_21_rns.bin, ecoli/ecoli.sa.bin, ecoli/ecoli.1.query.txt, ecoli/ecoli.ConcatenatedGenome.txt
+    output: ecoli/ecoli.query_time_basic-pla_15_21_rns.txt
+    jobid: 2
+    reason: Missing output files: ecoli/ecoli.query_time_basic-pla_15_21_rns.txt; Input files updated by another job: ecoli/ecoli.index_basic-pla_15_21_rns.bin
+    wildcards: fn=ecoli
+    resources: tmpdir=/tmp
+
+g++ -std=c++17 -Ofast -mbmi2 -msse4.2 -DNDEBUG -march=native -I ~/include -L ~/lib ../src//benchmark_index.cpp ../src//BitPacking.cpp ../src//pla_index.cpp -o ../executables//benchmark_index -lsdsl -ldivsufsort -ldivsufsort64;/usr/bin/time -f "%M,%e,%U,%S" --output-file=memkb_sec_Usec_Ksec_query.txt ../executables//benchmark_index ecoli/ecoli.ConcatenatedGenome.txt ecoli/ecoli.sa.bin 21 ecoli/ecoli.1.query.txt ecoli/ecoli.index_basic-pla_15_21_rns.bin  ecoli/ecoli.query_time_basic-pla_15_21_rns.txt basic-pla search 
+[Mon Jan 29 14:14:04 2024]
+Finished job 2.
+2 of 3 steps (67%) done
+Select jobs to execute...
+
+[Mon Jan 29 14:14:04 2024]
+localrule all:
+    input: ecoli/ecoli.index_basic-pla_15_21_rns.bin, ecoli/ecoli.query_time_basic-pla_15_21_rns.txt
+    jobid: 0
+    reason: Input files updated by another job: ecoli/ecoli.query_time_basic-pla_15_21_rns.txt, ecoli/ecoli.index_basic-pla_15_21_rns.bin
+    resources: tmpdir=/tmp
+
+[Mon Jan 29 14:14:04 2024]
+Finished job 0.
+3 of 3 steps (100%) done
+Complete log: .snakemake/log/2024-01-29T141353.932664.snakemake.log

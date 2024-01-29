@@ -1,5 +1,6 @@
 configfile: "config.yaml"
 Genomes = config["Genomes"]
+Genomes = [gn.rstrip('/') for gn in Genomes]
 
 indx_suff ='invalid'
 if config["Query_Type"] == "search":
@@ -71,6 +72,6 @@ rule benchmark:
         "-o {params.execPath}/benchmark_index "
         "-lsdsl -ldivsufsort -ldivsufsort64;"
         "/usr/bin/time -f \"%M,%e,%U,%S\" --output-file=memkb_sec_Usec_Ksec_query.txt "
-        "{params.execPath}/benchmark_index {input.saF} {input.genomeF} {params.kmer_size} {input.query_file} "
-        "{input.index_fn}  {output.runInfo} {params.knot_bs_thres} "
+        "{params.execPath}/benchmark_index {input.genomeF} {input.saF} {params.kmer_size} {input.query_file} "
+        "{input.index_fn}  {output.runInfo} "
         "{params.indx_type} {params.query_type} "

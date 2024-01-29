@@ -118,7 +118,7 @@ void pla_index::Load(string dic_fn, int64_t total_bits){
     // is.read(reinterpret_cast<char*>(&dic_size_t), sizeof(dic_size_t));
     
     dic_size = dic_size_t;
-    cout<<"#breakpoints: "<<dic_size<<endl;
+    // cout<<"#breakpoints: "<<dic_size<<endl;
     // brk_uniform_diff_packed.Load(fp, dic_size);
     brk_uniform_diff_packed.Load_is(is, dic_size);
     max_data_ratio = ((1ULL << total_bits) - 1)/(dic_size-1);
@@ -176,7 +176,7 @@ void pla_index::save_bit_info(string dic_fn, CBitPacking& ind_diff_pack){
     string suff = dic_fn.substr(pos);
     string bit_fn = pref+"_bitInfo"+suff;
     ofstream bit_info(bit_fn.c_str());
-    bit_info<<"#Breakpoints: "<<dic_size<<endl;
+    bit_info<<"#Segments: "<<dic_size<<endl;
     bit_info<<"Indirection vector: each: "<<uint64_t(ind_diff_pack.GetPacketSize())<<endl;
     bit_info<<"knot kmers: each: "<<uint64_t(brk_uniform_diff_packed.GetPacketSize())<<endl;
     bit_info<<"Y beg each: "<<ceil(y_range_beg.num_bits()/dic_size)<<endl;
@@ -234,6 +234,6 @@ void pla_index::Save(string dic_fn){
                   index_bitvec.size() * sizeof(uint64_t));
     }
 
-    save_unpacked(dic_fn);
-    save_bit_info(dic_fn, ind_diff_pack);
+    // save_unpacked(dic_fn);
+    // save_bit_info(dic_fn, ind_diff_pack);
 }

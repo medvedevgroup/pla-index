@@ -288,7 +288,6 @@ public:
         y_range_beg.encode(brk_sa_indx_vec.data(), brk_sa_indx_vec.size());
         encode_knots(brk_kval_vec);
         if(isFirstIndexReturned) calc_index_bv(begin);
-        cout<<"#breakpoints: "<<dic_size<<endl;
     }
 
     template<typename RandomIt>
@@ -347,6 +346,5 @@ public:
         y_range_beg.encode(brk_sa_indx_vec.data(), brk_sa_indx_vec.size());
         encode_knots(brk_kval_vec);
         if(isFirstIndexReturned) calc_index_bv(begin);
-        cout<<"#breakpoints: "<<dic_size<<endl;
     }
 };
