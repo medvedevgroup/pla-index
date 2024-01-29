@@ -144,6 +144,6 @@ Here is an example assuming we have the `ecoli` folder inside the `tests` folder
 ```
 cd tests
 mkdir -p ../executables
-python3 ../CreateConfigFile.py --genome_folder example --epsilon 15
+python3 ../CreateConfigFile.py --genome_folder ecoli --epsilon 15
 snakemake -s ../Snakefile --cores=1 -p
 ```
