@@ -12,7 +12,7 @@ pla-index allows faster query of a k-mer rank function using an index that is cr
 Clone the repo using:
 
 ```console
-git clone https://github.com/medvedevgroup/pla-index.git
+git clone --recursive https://github.com/medvedevgroup/pla-index.git
 ```
 
 To filter 'N' from a genome:
@@ -30,7 +30,7 @@ OUTPUT-PREFIX: The output file name format is OUTPUT-PREFIX.ConcatenatedGenome.t
 ```
 Here on, we assume we are still inside the `tests` folder.
 
-To construct suffix array we use [libdivsufsort](https://github.com/y-256/libdivsufsort) tool. 
+To construct suffix array we use [libdivsufsort](https://github.com/hasin-abrar/libdivsufsort) tool. 
 We modify it slightly to allow 64 bit integers. 
 To construct the suffix array builder tool `mksary`:
 ```
