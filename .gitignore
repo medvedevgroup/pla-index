@@ -2,6 +2,6 @@ Dataset/
 executables/
 strobealign/build/
 strobealign/*.bam
-strobealign/tests/drosophila
+strobealign/tests/drosophila/
 strobealign/stroalign_meta.bin.unpacked
 strobealign/*.bin
