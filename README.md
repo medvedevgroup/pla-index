@@ -5,7 +5,7 @@ pla-index allows faster query of a k-mer rank function using an index that is cr
 - Linux (64 bit)
 - C++17
 - [SDSL](https://github.com/simongog/sdsl-lite/tree/master)
-- Snakemake [for automating all compilations]
+- [Snakemake](https://snakemake.readthedocs.io/en/stable/) (for automating all compilations)
 
 # Quick Start
 
@@ -67,7 +67,7 @@ SUFFIX-ARRAY: Suffix array for GENOME in a binary file
 KMER-SIZE: Kmer size to be used to construct the index
 EPS: Epsilon value to be used for constructing the pla-index
 INDEX-NAME: File name where to save the index
-L-VALUE: To determine the size of the shortcut array, D.
+L-VALUE: To determine the size of the shortcut array, D. |D| = 2^l
 INDEX-TYPE: Whether to build "basic-pla" or "repeat-pla"
 QUERY-TYPE: Whether to do "search" or "rank" query afterwards
 ```
@@ -128,7 +128,7 @@ Required Parameters:
 Optional parameters with required argument:
 
 | Parameter  | Type    | Description    |
-|-------------|-------------|-------------|
+|-----------------|-------------|-------------|
 |--index_type |[String] | What kind of index type to construct and/or use (default: basic-pla). Possible values: "basic-pla" or "repeat-pla"|
 |--query_type |[String] | What kind of query to do (default: search). Possible values: "search" or "rank"|
 |--kmer_size |[int] | Kmer size for which pla-index will be calculated (default: 21)|
