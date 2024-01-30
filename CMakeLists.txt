@@ -11,8 +11,8 @@ add_library(pla STATIC
   src/BitPacking.cpp
   src/pla_index.cpp
 )
-target_include_directories(pla PUBLIC ~/include/ )
-target_link_directories(pla PUBLIC ~/lib/)
+target_include_directories(pla PUBLIC  /home/hasin/include/ ) 
+target_link_directories(pla PUBLIC /home/hasin/lib/) 
 target_link_libraries(pla PUBLIC sdsl divsufsort divsufsort64)
 
 add_executable(build_index 

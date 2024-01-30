@@ -5,7 +5,8 @@ pla-index allows faster query of a k-mer rank function using an index that is cr
 - Linux (64 bit)
 - C++17
 - [SDSL](https://github.com/simongog/sdsl-lite/tree/master)
-- [Snakemake](https://snakemake.readthedocs.io/en/stable/) (for automating all compilations)
+- cmake (>= 3.16)
+- [Snakemake](https://snakemake.readthedocs.io/en/stable/) (for automating all computations)
 
 # Quick Start
 
@@ -28,15 +29,27 @@ To use the exact-pla, run the following command:
 git checkout pla-index-exact
 ```
 
-To compile from sources:
-```shell
+To compile from sources, at first update the CMakeLists.txt with SDSL library and include path.
+This can be done by running the following script:
+
+```
 cd pla-index
+./update_cmake_lists.sh SDSL_INCLUDE_PATH SDSL_LIB_PATH
+
+Parameter descriptions:
+SDSL_INCLUDE_PATH: Path to the SDSL include folder [typically ~/include/]
+SDSL_LIB_PATH: Path to the SDSL library folder [typically ~/lib/]
+```
+
+After updating CMakeLists.txt, all files can be compiled using cmake.
+
+```shell
 mkdir build; cd build; cmake ..; make -j 4
 ```
 
 To construct suffix array we use [libdivsufsort](https://github.com/hasin-abrar/libdivsufsort) tool. 
 We modify it slightly to allow 64 bit integers. 
-To construct the suffix array builder tool `mksary`:
+To construct the suffix array builder executable `mksary`:
 ```
 cd ../libdivsufsort
 mkdir build_sa
