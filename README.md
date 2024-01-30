@@ -1,5 +1,5 @@
-# pla-index
-pla-index allows faster query of a k-mer rank function using an index that is created using piece-wise linear approximation.
+# pla-index-exact
+pla-index-exact allows faster query of a k-mer rank function by storing errors from piece-wise linear approximation using an MPHF (pthash).
 
 # Requirements
 - Linux (64 bit)
@@ -11,9 +11,16 @@ pla-index allows faster query of a k-mer rank function using an index that is cr
 
 Clone the repo using:
 
-```console
+```shell
 git clone --recursive https://github.com/medvedevgroup/pla-index.git
 ```
+
+Switch to this branch:
+```shell
+git checkout pla-index-exact
+```
+The followings steps are almost similar to the `main` branch. 
+The only difference is that one does not need to specify the INDEX-TYPE or QUERY-TYPE anywhere. (It will always be `exact-pla` and `rank` operation)
 
 To filter 'N' from a genome:
 
@@ -58,7 +65,7 @@ To build the index:
 ```
 g++ -std=c++17 -Ofast -mbmi2 -msse4.2 -DNDEBUG -march=native -I SDSL_INCLUDE_FOLDER -L SDSL_LIBRARY_FOLDER ../src//build_index.cpp ../src//BitPacking.cpp ../src//pla_index.cpp -o ../executables//build_index -lsdsl -ldivsufsort -ldivsufsort64
 
-../executables//build_index GENOME SUFFIX-ARRAY KMER-SIZE EPS INDEX-NAME L-VALUE INDEX-TYPE QUERY-TYPE
+../executables//build_index GENOME SUFFIX-ARRAY KMER-SIZE EPS INDEX-NAME L-VALUE
 
 Parameter description:
 
@@ -68,8 +75,6 @@ KMER-SIZE: Kmer size to be used to construct the index
 EPS: Epsilon value to be used for constructing the pla-index
 INDEX-NAME: File name where to save the index
 L-VALUE: To determine the size of the shortcut array, D. |D| = 2^l
-INDEX-TYPE: Whether to build "basic-pla" or "repeat-pla"
-QUERY-TYPE: Whether to do "search" or "rank" query afterwards
 ```
 
 To construct query files:
@@ -92,7 +97,7 @@ To query the index:
 ```
 g++ -std=c++17 -Ofast -mbmi2 -msse4.2 -DNDEBUG -march=native -I SDSL_INCLUDE_FOLDER -L SDSL_LIBRARY_FOLDER ../src//benchmark_index.cpp ../src//BitPacking.cpp ../src//pla_index.cpp -o ../executables//benchmark_index -lsdsl -ldivsufsort -ldivsufsort64
 
-../executables//benchmark_index GENOME SUFFIX-ARRAY KMER-SIZE QUERY-FILE INDEX-NAME RUNINFO-FILE INDEX-TYPE QUERY-TYPE
+../executables//benchmark_index GENOME SUFFIX-ARRAY KMER-SIZE QUERY-FILE INDEX-NAME RUNINFO-FILE 
 
 Parameter description:
 GENOME: Whole genome string concatenated filtered by 'N'
@@ -100,8 +105,6 @@ SUFFIX-ARRAY: Suffix array for GENOME in a binary file
 KMER-SIZE: Kmer size of the query k-mers
 INDEX-NAME: Index file to use 
 RUNINFO-FILE: Where to store the runtime information
-INDEX-TYPE: Type of the stored index ("basic-pla" or "repeat-pla")
-QUERY-TYPE: Whether to do "search" or "rank" query
 ```
 
 ## Snakemake
@@ -129,8 +132,6 @@ Optional parameters with required argument:
 
 | Parameter  | Type    | Description    |
 |-----------------|-------------|-------------|
-|--index_type |[String] | What kind of index type to construct and/or use (default: basic-pla). Possible values: "basic-pla" or "repeat-pla"|
-|--query_type |[String] | What kind of query to do (default: search). Possible values: "search" or "rank"|
 |--kmer_size |[int] | Kmer size for which pla-index will be calculated (default: 21)|
 |--code_path |[String] | Path where the source code is (default: ../src/)|
 |--exec_path |[String] | Path where the executables will be stored (default: ../executables/)|

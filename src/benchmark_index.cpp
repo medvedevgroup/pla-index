@@ -31,25 +31,23 @@ int main(int argc, char **argv){
     string query_fn = argv[4];
     string indx_fn = argv[5];
     string runInfo_fn = argv[6];
-    string indx_type = argv[7];
-    string query_type = argv[8];
-    // int64_t eps = stoi(argv[10]);
+    // string indx_type = "exact-pla";
     int64_t knot_bs_thres = 64;
-    bool isFirstIndexReturned;
+    bool isFirstIndexReturned = false;
 
-    if (query_type == "search") isFirstIndexReturned = false;
-    else if(query_type == "rank") isFirstIndexReturned = true;
-    else{
-        throw std::logic_error("query type can be either search or rank");
-    }
+    // if (query_type == "search") isFirstIndexReturned = false;
+    // else if(query_type == "rank") isFirstIndexReturned = true;
+    // else{
+    //     throw std::logic_error("query type can be either search or rank");
+    // }
     
     
-    INDX_TYPE it;
+    INDX_TYPE it = EXACT_PLA;
     
-    if(indx_type != "exact-pla"){
-        throw std::logic_error("indx type can only be exact-pla in this version");
-    }
-    it = EXACT_PLA;
+    // if(indx_type != "exact-pla"){
+    //     throw std::logic_error("indx type can only be exact-pla in this version");
+    // }
+    // it = EXACT_PLA;
 
     // if (indx_type == "basic-pla") it = BASIC_PLA;    
     // else if(indx_type == "repeat-pla") it = REPEAT_PLA;

@@ -2,18 +2,18 @@ configfile: "config.yaml"
 Genomes = config["Genomes"]
 Genomes = [gn.rstrip('/') for gn in Genomes]
 
-indx_suff ='invalid'
-if config["Query_Type"] == "search":
-    indx_suff = 'rns' # rank not supported
-elif config["Query_Type"] == "rank":
-    indx_suff = 'rs' #rank supported
+indx_suff ='exact'
+# if config["Query_Type"] == "search":
+#     indx_suff = 'rns' # rank not supported
+# elif config["Query_Type"] == "rank":
+#     indx_suff = 'rs' #rank supported
 
 rule all:
     input:
         # dictionary uniform knot encoding
-        expand("{fn}/{fn}.index_"+config["Indx_Type"]+"_"+config["Eps"]+"_"+
+        expand("{fn}/{fn}.index_"+config["Eps"]+"_"+
             config["Kmer_Size"]+"_"+indx_suff+".bin", fn=Genomes),
-        expand("{fn}/{fn}.query_time_"+config["Indx_Type"]+"_"+config["Eps"]+"_"
+        expand("{fn}/{fn}.query_time_"+config["Eps"]+"_"
             +config["Kmer_Size"]+"_"+indx_suff+".txt", fn=Genomes)
 
 rule build_dictionary:
@@ -27,12 +27,10 @@ rule build_dictionary:
         flags = config["Compile_Flag"],
         lp_bits = config["LP_Bits"],
         epsilon = config["Eps"],
-        indx_type = config["Indx_Type"],
-        query_type = config["Query_Type"],
         sdsl_include_path = config["SDSL_Inc"],
         sdsl_lib_path = config["SDSL_Lib"],
     output:
-        index_fn = "{fn}/{fn}.index_"+config["Indx_Type"]+"_"+config["Eps"]+"_"+
+        index_fn = "{fn}/{fn}.index_"+config["Eps"]+"_"+
             config["Kmer_Size"]+"_"+indx_suff+".bin"
     shell:
         "g++ -std=c++17 {params.flags} -I {params.sdsl_include_path} -L {params.sdsl_lib_path} {params.codePath}/build_index.cpp "
@@ -43,11 +41,10 @@ rule build_dictionary:
         "{params.execPath}/build_index {input.genomeF} {input.saF} "
         "{params.kmer_size} {params.epsilon} "
         "{output.index_fn} {params.lp_bits} "
-        "{params.indx_type} {params.query_type} "
 
 rule benchmark:
     input:
-        index_fn = "{fn}/{fn}.index_"+config["Indx_Type"]+"_"+config["Eps"]+"_"+
+        index_fn = "{fn}/{fn}.index_"+config["Eps"]+"_"+
             config["Kmer_Size"]+"_"+indx_suff+".bin",
         saF = "{fn}/{fn}.sa.bin",
         query_file = "{fn}/{fn}."+config["Query_Tag"]+".query.txt",
@@ -58,13 +55,11 @@ rule benchmark:
         codePath = config["CodePath"],
         execPath = config["ExecPath"],
         flags = config["Compile_Flag"],
-        indx_type = config["Indx_Type"],
-        query_type = config["Query_Type"],
         sdsl_include_path = config["SDSL_Inc"],
         sdsl_lib_path = config["SDSL_Lib"]
 
     output:
-        runInfo = "{fn}/{fn}.query_time_"+config["Indx_Type"]+"_"+config["Eps"]+"_"
+        runInfo = "{fn}/{fn}.query_time_"+config["Eps"]+"_"
             +config["Kmer_Size"]+"_"+indx_suff+".txt"
     shell:
         "g++ -std=c++17 {params.flags} -I {params.sdsl_include_path} -L {params.sdsl_lib_path} {params.codePath}/benchmark_index.cpp "
@@ -74,4 +69,3 @@ rule benchmark:
         "/usr/bin/time -f \"%M,%e,%U,%S\" --output-file=memkb_sec_Usec_Ksec_query.txt "
         "{params.execPath}/benchmark_index {input.genomeF} {input.saF} {params.kmer_size} {input.query_file} "
         "{input.index_fn}  {output.runInfo} "
-        "{params.indx_type} {params.query_type} "

@@ -237,7 +237,6 @@ public:
         vector<int64_t> true_err; // to first position
         while(1){
             curr_kval = data[indx];
-            // cout<<indx<<" "<<GetKmerAtIndex(indx)<<" "<<curr_kval<<endl;
             indx++;        
             if(curr_kval == -1) continue;
             unique_kvals.emplace_back(curr_kval);
@@ -247,13 +246,10 @@ public:
             query_err = (indx - 1) - query_pred;
             true_err.emplace_back(query_err);
             prev_kval = curr_kval;
-            // cout<<"cur kval: "<<curr_kval<<" err: "<<query_pred_err.second
-            // <<" act idx: "<<indx-1<<" pred: "<<query_pred_err.first<<endl;
             break;
-        }
-        // std::cout<<"Main loop err calc\n";    
+        } 
         for(int64_t curr_sa_indx=indx; curr_sa_indx<total_data_points; curr_sa_indx++){     
-            // cout<<curr_sa_indx<<" "; 
+            // cout<<curr_sa_indx<<endl; 
             curr_kval = data[curr_sa_indx];
             if(curr_kval == prev_kval || curr_kval == -1) {
                 // cout<<curr_kval<<endl;
@@ -285,15 +281,15 @@ public:
         auto timings = f.build_in_internal_memory(keys.begin(), keys.size(), config);
         double total_seconds = timings.partitioning_seconds + timings.mapping_ordering_seconds +
                             timings.searching_seconds + timings.encoding_seconds;
-        // ofstream mphf_time("mphf_time"+to_string(epsilon)+".txt");
-        // mphf_time << "function built in " << pthash::seconds(pthash::clock_type::now() - start) << " seconds"
-        //         << std::endl;
+        ofstream mphf_time("mphf_time"+to_string(epsilon)+".txt");
+        mphf_time << "function built in " << pthash::seconds(pthash::clock_type::now() - start) << " seconds"
+                << std::endl;
         cout << "function built in " << pthash::seconds(pthash::clock_type::now() - start) << " seconds"
                 << std::endl;
         // mphf_time << "computed: " << total_seconds << " seconds" << std::endl;
         /* Compute and print the number of bits spent per key. */
         double bits_per_key = static_cast<double>(f.num_bits()) / f.num_keys();
-        // mphf_time << "function uses " << bits_per_key << " [bits/key]" << std::endl;
+        mphf_time << "function uses " << bits_per_key << " [bits/key]" << std::endl;
         cout << "function uses " << bits_per_key << " [bits/key]" << std::endl;
 
         // storing the err values in the index from MPHF and Bitpack it
@@ -357,6 +353,7 @@ public:
         y_range_beg.encode(brk_sa_indx_vec.data(), brk_sa_indx_vec.size());
         encode_knots(brk_kval_vec);
         if(isFirstIndexReturned) calc_index_bv(begin);
+        cout<<"#Segments: "<<dic_size<<endl;
     }
 
     template<typename RandomIt>
@@ -415,6 +412,6 @@ public:
         y_range_beg.encode(brk_sa_indx_vec.data(), brk_sa_indx_vec.size());
         encode_knots(brk_kval_vec);
         if(isFirstIndexReturned) calc_index_bv(begin);
-        cout<<"#Segments: "<<dic_size<<endl;
+        cout<<"#breakpoints: "<<dic_size<<endl;
     }
 };

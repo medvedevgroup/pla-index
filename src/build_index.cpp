@@ -8,30 +8,12 @@
 int main(int argc, char **argv){
     string gn_fn = argv[1]; 
     string sa_fn = argv[2];
-    int64_t kmer_size = stoi(argv[3]);
-    int64_t eps = stoi(argv[4]);
+    int64_t kmer_size = stoll(argv[3]);
+    int64_t eps = stoll(argv[4]);
     string indx_fn = argv[5];
-    int64_t lp_bits = stoi(argv[6]);
-    string indx_type = argv[7];
-    string query_type = argv[8];
-    bool isFirstIndexReturned;
-
-    if (query_type == "search") isFirstIndexReturned = false;
-    else if(query_type == "rank") isFirstIndexReturned = true;
-    else{
-        throw std::logic_error("query type can be either search or rank");
-    }
-    
-    INDX_TYPE it;
-    if(indx_type != "exact-pla"){
-        throw std::logic_error("indx type can only be exact-pla in this version");
-    }
-    it = EXACT_PLA;
-    // if (indx_type == "basic-pla") it = BASIC_PLA;    
-    // else if(indx_type == "repeat-pla") it = REPEAT_PLA;
-    // else{
-    //     throw std::logic_error("indx type can be either basic-pla or repeat-pla");
-    // }
+    int64_t lp_bits = stoll(argv[6]);
+    bool isFirstIndexReturned = false;
+    INDX_TYPE it = EXACT_PLA;
 
     suffix_array<int64_t> sa;
     sa.Load(gn_fn, sa_fn, kmer_size);
