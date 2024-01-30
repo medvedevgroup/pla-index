@@ -11,8 +11,19 @@ pla-index allows faster query of a k-mer rank function using an index that is cr
 
 Clone the repo using:
 
-```console
+```shell
 git clone --recursive https://github.com/medvedevgroup/pla-index.git
+```
+
+This repository has two other branches.
+To use the read aligner application, run the following command:
+```shell
+git checkout strobealign-application
+```
+
+To use the exact-pla, run the following command:
+```shell
+git checkout pla-index-exact
 ```
 
 To filter 'N' from a genome:
