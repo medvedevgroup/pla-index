@@ -5,9 +5,12 @@ pla-index-exact allows faster query of a k-mer rank function by storing errors f
 - Linux (64 bit)
 - C++17
 - [SDSL](https://github.com/simongog/sdsl-lite/tree/master)
-- [Snakemake](https://snakemake.readthedocs.io/en/stable/) (for automating all compilations)
+- cmake (>= 3.16)
+- [Snakemake](https://snakemake.readthedocs.io/en/stable/) (for automating all computations)
 
 # Quick Start
+
+## Installation
 
 Clone the repo using:
 
@@ -15,31 +18,38 @@ Clone the repo using:
 git clone --recursive https://github.com/medvedevgroup/pla-index.git
 ```
 
-Switch to this branch:
+This repository has two other branches for read aligner and two different versions of pla-index.\
+To use the read aligner application, run the following command:
 ```shell
-git checkout pla-index-exact
+git checkout strobealign-application
 ```
-The followings steps are almost similar to the `main` branch. 
-The only difference is that one does not need to specify the INDEX-TYPE or QUERY-TYPE anywhere. (It will always be `exact-pla` and `rank` operation)
 
-To filter 'N' from a genome:
+To use the basic-pla or repeat-pla, run the following command:
+```shell
+git checkout main
+```
+
+To compile from sources, at first update the CMakeLists.txt with SDSL library and include path.
+This can be done by running the following script:
 
 ```
-cd tests
-mkdir -p ../executables
-g++ ../src/FilterNConcatFasta.cpp -o ../executables/FilterNConcatFasta
+cd pla-index
+./update_cmake_lists.sh SDSL_INCLUDE_PATH SDSL_LIB_PATH
 
-../executables/FilterNConcatFasta FASTA-FILE OUTPUT-PREFIX
-
-Parameter description:
-FASTA-FILE: Fasta file on which pla-index will be built
-OUTPUT-PREFIX: The output file name format is OUTPUT-PREFIX.ConcatenatedGenome.txt
+Parameter descriptions:
+SDSL_INCLUDE_PATH: Path to the SDSL include folder [typically ~/include/]
+SDSL_LIB_PATH: Path to the SDSL library folder [typically ~/lib/]
 ```
-Here on, we assume we are still inside the `tests` folder.
 
-To construct suffix array we use [libdivsufsort](https://github.com/hasin-abrar/libdivsufsort) tool. 
+After updating CMakeLists.txt, all files can be compiled using cmake.
+
+```shell
+mkdir build; cd build; cmake ..; make -j 4
+```
+
+To construct suffix array, we use [libdivsufsort](https://github.com/hasin-abrar/libdivsufsort) tool. 
 We modify it slightly to allow 64 bit integers. 
-To construct the suffix array builder tool `mksary`:
+To construct the suffix array builder executable `mksary`:
 ```
 cd ../libdivsufsort
 mkdir build
@@ -48,63 +58,73 @@ cmake -DCMAKE_BUILD_TYPE="Release" \
 -DCMAKE_INSTALL_PREFIX="/usr/local" ..
 sed -i 's/int32_t/int64_t/g' include/divsufsort.h
 make
+cp examples/mksary ../../build/
+```
+
+## Usage
+
+Now, all the executables are inside the `pla-index/build` folder. 
+Here on, we assume we are inside this folder.
+The followings steps are almost similar to the `main` branch. 
+The only difference is that one does not need to specify the INDEX-TYPE or QUERY-TYPE anywhere. (It will always be `exact-pla` and `rank` operation)
+
+To filter 'N' from a genome:
+```
+./filterNConcat FASTA-FILE OUTPUT-PREFIX
+
+Parameter description:
+FASTA-FILE: [string], Fasta file on which pla-index will be built
+OUTPUT-PREFIX: [string], The output file name format is OUTPUT-PREFIX.ConcatenatedGenome.txt
 ```
 
 To construct suffix array on the concatenated genome:
 
 ```
-cd ../tests/
-../libdivsufsort/build/examples/mksary GENOME SUFFIX-ARRAY
+./mksary GENOME SUFFIX-ARRAY
 
 Parameter description:
-GENOME: Concatenated genome without 'N'
-SUFFIX-ARRAY: Name of the binary file where suffix array will be stored
+GENOME: [string], Concatenated genome without 'N'
+SUFFIX-ARRAY: [string], Name of the binary file where suffix array will be stored
 ```
 
 To build the index:
 ```
-g++ -std=c++17 -Ofast -mbmi2 -msse4.2 -DNDEBUG -march=native -I SDSL_INCLUDE_FOLDER -L SDSL_LIBRARY_FOLDER ../src//build_index.cpp ../src//BitPacking.cpp ../src//pla_index.cpp -o ../executables//build_index -lsdsl -ldivsufsort -ldivsufsort64
-
-../executables//build_index GENOME SUFFIX-ARRAY KMER-SIZE EPS INDEX-NAME L-VALUE
+./build_index GENOME SUFFIX-ARRAY KMER-SIZE EPS INDEX-NAME L-VALUE 
 
 Parameter description:
 
-GENOME: Whole genome string concatenated filtered by 'N'
-SUFFIX-ARRAY: Suffix array for GENOME in a binary file
-KMER-SIZE: Kmer size to be used to construct the index
-EPS: Epsilon value to be used for constructing the pla-index
-INDEX-NAME: File name where to save the index
-L-VALUE: To determine the size of the shortcut array, D. |D| = 2^l
+GENOME: [string], Whole genome string concatenated filtered by 'N'
+SUFFIX-ARRAY: [string], Suffix array for GENOME in a binary file
+KMER-SIZE: [int], Kmer size to be used to construct the index
+EPS: [int], Epsilon value to be used for constructing the pla-index
+INDEX-NAME: [string], File name where to save the index
+L-VALUE: [int], To determine the size of the shortcut array, D. |D| = 2^l
 ```
 
 To construct query files:
 ```
-g++ ../src/CreateQueries.cpp -o ../executables/CreateQueries
-
-../executables/CreateQueries GENOME SUFFIX-ARRAY PREFIX KMER-SIZE NO-OF-QUERIES NO-OF-FILES
+./create_queries GENOME SUFFIX-ARRAY PREFIX KMER-SIZE NO-OF-QUERIES NO-OF-FILES
 
 Parameter description:
 
-GENOME: Whole genome string concatenated filtered by 'N'
-SUFFIX-ARRAY: Suffix array for GENOME in a binary file
-PREFIX: File name prefix of the query file
-KMER-SIZE: Kmer size to be used to construct the index
-NO-OF-QUERIES: How many query k-mers to randomly construct
-NO-OF-FILES: How many query files to construct
+GENOME: [string], Whole genome string concatenated filtered by 'N'
+SUFFIX-ARRAY: [string], Suffix array for GENOME in a binary file
+PREFIX: [string], File name prefix of the query file
+KMER-SIZE: [int], Kmer size to be used to construct the index
+NO-OF-QUERIES: [int], How many query k-mers to randomly construct
+NO-OF-FILES: [int], How many query files to construct
 ```
 
 To query the index:
 ```
-g++ -std=c++17 -Ofast -mbmi2 -msse4.2 -DNDEBUG -march=native -I SDSL_INCLUDE_FOLDER -L SDSL_LIBRARY_FOLDER ../src//benchmark_index.cpp ../src//BitPacking.cpp ../src//pla_index.cpp -o ../executables//benchmark_index -lsdsl -ldivsufsort -ldivsufsort64
-
-../executables//benchmark_index GENOME SUFFIX-ARRAY KMER-SIZE QUERY-FILE INDEX-NAME RUNINFO-FILE 
+./benchmark_index GENOME SUFFIX-ARRAY KMER-SIZE QUERY-FILE INDEX-NAME RUNINFO-FILE 
 
 Parameter description:
-GENOME: Whole genome string concatenated filtered by 'N'
-SUFFIX-ARRAY: Suffix array for GENOME in a binary file
-KMER-SIZE: Kmer size of the query k-mers
-INDEX-NAME: Index file to use 
-RUNINFO-FILE: Where to store the runtime information
+GENOME: [string], Whole genome string concatenated filtered by 'N'
+SUFFIX-ARRAY: [string], Suffix array for GENOME in a binary file
+KMER-SIZE: [int], Kmer size of the query k-mers
+INDEX-NAME: [string], Index file to use 
+RUNINFO-FILE: [string], Where to store the runtime information
 ```
 
 ## Snakemake
@@ -125,7 +145,7 @@ Required Parameters:
 
 | Parameter  | Type    | Description    |
 |-------------|-------------|-------------|
-|--genome_folder | [String] |The name of the folder containing the genome, suffix array and query files|
+|--genome_folder | [string] |The name of the folder containing the genome, suffix array and query files|
 |--epsilon |  [int]   |Epsilon value to be used to create pla-index|
 
 Optional parameters with required argument:
@@ -133,12 +153,12 @@ Optional parameters with required argument:
 | Parameter  | Type    | Description    |
 |-----------------|-------------|-------------|
 |--kmer_size |[int] | Kmer size for which pla-index will be calculated (default: 21)|
-|--code_path |[String] | Path where the source code is (default: ../src/)|
-|--exec_path |[String] | Path where the executables will be stored (default: ../executables/)|
+|--code_path |[string] | Path where the source code is (default: ../src/)|
+|--exec_path |[string] | Path where the executables will be stored (default: ../executables/)|
 |--l_bits |[int] | How many elements to store in the shortcut array, D. &#124;D&#124; = 2<sup>l</sup> (default: 16)|
 |--query_tag |[int] | Which query file to use (default: 1)|
-|--sdsl_lib_path |[String] | Path to the SDSL library folder (default: ~/lib)|
-|--sdsl_inc_path |[String] | Path to the SDSL include folder (defaul: ~/include)|
+|--sdsl_lib_path |[string] | Path to the SDSL library folder (default: ~/lib)|
+|--sdsl_inc_path |[string] | Path to the SDSL include folder (defaul: ~/include)|
 
 Here is an example assuming we have the `ecoli` folder inside the `tests` folder:
 

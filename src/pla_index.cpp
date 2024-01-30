@@ -212,6 +212,6 @@ void pla_index::Save(string dic_fn){
     err_dict_packed.Save_os(os);
 
 
-    save_unpacked(dic_fn);
-    save_bit_info(dic_fn, ind_diff_pack);
+    // save_unpacked(dic_fn);
+    // save_bit_info(dic_fn, ind_diff_pack);
 }
