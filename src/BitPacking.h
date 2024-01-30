@@ -19,7 +19,7 @@ using namespace std;
 * Each 32 bit value is packed into log(max_val) bits.
 * Can be improved using a boundary vector.
 */
-#pragma pack(push, 1)
+// #pragma pack(push, 1)
 class CBitPacking{
 private:    
     uint64_t m_iPacketSize; // How many bits needed to store the largest element
@@ -50,4 +50,4 @@ public:
     void Save_os(std::ostream &os) const;
     void Load_is(std::istream &is, uint64_t numElements);
 };
-#pragma pack(pop)
+// #pragma pack(pop)
