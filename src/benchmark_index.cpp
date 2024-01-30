@@ -93,7 +93,7 @@ int main(int argc, char **argv){
     runFile<<"Correct: "<<_correct<<" Total: "<<query_kmers_vec.size()<<" Accurancy: "<<accuracy<<"%"<<std::endl;
 
     // COMMENT LATER
-    pla.save_unpacked(indx_fn);
+    // pla.save_unpacked(indx_fn);
 
     return 0;
 }
