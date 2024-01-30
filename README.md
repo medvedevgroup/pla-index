@@ -47,13 +47,13 @@ After updating CMakeLists.txt, all files can be compiled using cmake.
 mkdir build; cd build; cmake ..; make -j 4
 ```
 
-To construct suffix array we use [libdivsufsort](https://github.com/hasin-abrar/libdivsufsort) tool. 
+To construct suffix array, we use [libdivsufsort](https://github.com/hasin-abrar/libdivsufsort) tool. 
 We modify it slightly to allow 64 bit integers. 
 To construct the suffix array builder executable `mksary`:
 ```
 cd ../libdivsufsort
-mkdir build_sa
-cd build_sa
+mkdir build
+cd build
 cmake -DCMAKE_BUILD_TYPE="Release" \
 -DCMAKE_INSTALL_PREFIX="/usr/local" ..
 sed -i 's/int32_t/int64_t/g' include/divsufsort.h
@@ -63,7 +63,7 @@ cp examples/mksary ../../build/
 
 ## Usage
 
-Now, all the executables are inside the `build` folder. 
+Now, all the executables are inside the `pla-index/build` folder. 
 Here on, we assume we are inside this folder.
 
 To filter 'N' from a genome:
