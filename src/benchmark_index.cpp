@@ -45,11 +45,17 @@ int main(int argc, char **argv){
     
     
     INDX_TYPE it;
-    if (indx_type == "basic-pla") it = BASIC_PLA;    
-    else if(indx_type == "repeat-pla") it = REPEAT_PLA;
-    else{
-        throw std::logic_error("indx type can be either \"basic-pla\" or \"repeat-pla\"");
+    
+    if(indx_type != "exact-pla"){
+        throw std::logic_error("indx type can only be exact-pla in this version");
     }
+    it = EXACT_PLA;
+
+    // if (indx_type == "basic-pla") it = BASIC_PLA;    
+    // else if(indx_type == "repeat-pla") it = REPEAT_PLA;
+    // else{
+    //     throw std::logic_error("indx type can be either \"basic-pla\" or \"repeat-pla\"");
+    // }
 
     suffix_array<int64_t> sa;
     sa.Load(gn_fn, sa_fn, kmer_size);
@@ -91,9 +97,6 @@ int main(int argc, char **argv){
     double accuracy = ((double)_correct/query_kmers_vec.size()) * 100;
     printf("Accuracy: %0.2f %%\n",accuracy);
     runFile<<"Correct: "<<_correct<<" Total: "<<query_kmers_vec.size()<<" Accurancy: "<<accuracy<<"%"<<std::endl;
-
-    // COMMENT LATER
-    pla.save_unpacked(indx_fn);
 
     return 0;
 }

@@ -16,11 +16,12 @@
 #include "utils/ef_sequence.hpp"
 #include "utils/essentials.hpp"
 #include "../sdsl/dac_vector.hpp"
+#include "include/pthash.hpp"
 
 
 using namespace std;
 
-enum INDX_TYPE {BASIC_PLA, REPEAT_PLA};
+enum INDX_TYPE {BASIC_PLA, REPEAT_PLA, EXACT_PLA};
 
 class pla_index{
 private:
@@ -31,10 +32,17 @@ private:
     
     vector<uint64_t> indirection_vec, index_bitvec;
 
-    CBitPacking brk_uniform_diff_packed, diff_packd;
+    CBitPacking brk_uniform_diff_packed, diff_packd, err_dict_packed;
     arank::ef_sequence<false> y_range_beg;
     sdsl::dac_vector_dp<> sa_diff_dac_vec;
     INDX_TYPE indx_type;
+
+    typedef pthash::single_phf<pthash::murmurhash2_128,         // base hasher
+                       pthash::dictionary_dictionary,  // encoder type
+                       true                    // minimal
+                       >
+        pthash_type;
+    pthash_type f;
 
 public:
     pla_index(int64_t eps, int64_t lp_bits, uint64_t largest,
@@ -51,12 +59,11 @@ public:
     void Save(string dic_fn);
     void save_unpacked(string dic_fn);
     void save_bit_info(string dic_fn, CBitPacking &ind_diff_pack);
-    uint64_t get_size_in_bytes();
-    inline uint64_t get_num_segments() const {return dic_size;}
-
+    uint64_t get_total_size_in_bytes();
     const vector<uint64_t> get_processed_ind_vec() const;
     void Load(string dic_fn, int64_t total_bits);
     int64_t binary_search(int64_t lo, int64_t hi, const int64_t kval) const;
+    inline uint64_t get_num_knots() const {return dic_size;}
     
     template <typename DataType>
     uint64_t get_first_index(uint64_t idx, const DataType &data) const{
@@ -80,11 +87,17 @@ public:
         }        
     }
     
-    
-
     // suffix array version
     template <typename DataType>
     int64_t query(const int64_t query_val, const string &query, const DataType &data) const{
+        int64_t query_pred = get_query_pred(query_val, data);
+        int64_t true_idx = query_pred + err_dict_packed.GetValueAt(f(query_val));
+        return data.get_sa_val(true_idx);
+    }
+
+    // suffix array version
+    template <typename DataType>
+    int64_t get_query_pred(const int64_t query_val, const DataType &data) const{
         uint64_t lp_bit_value = query_val >> shift_bits;
         int64_t brkpnt, query_pred, direction;
         int64_t ind_brk_beg_idx = indirection_vec[lp_bit_value];
@@ -115,23 +128,9 @@ public:
             else{
                 const int64_t brk_end_kval = brk_uniform_diff_packed.GetValueAt(brkpnt+1)+max_data_ratio*(brkpnt+1);
                 const int64_t brk_beg_sa_indx = int64_t(y_range_beg.access(brkpnt)) - epsilon;
-                int64_t brk_end_sa_indx;
-                switch (indx_type){
-                case REPEAT_PLA:
-                    {
-                    int64_t diff_val = sa_diff_dac_vec[brkpnt];
-                    brk_end_sa_indx = (diff_val & 1)
-                                        ? y_range_beg.access(brkpnt + 1) - (diff_val >> 1) - epsilon
-                                        : y_range_beg.access(brkpnt + 1) + (diff_val >> 1) - epsilon;
-                    break;
-                    }
-                case BASIC_PLA:
-                    {
-                    brk_end_sa_indx = y_range_beg.access(brkpnt + 1) - 
+                const int64_t brk_end_sa_indx = y_range_beg.access(brkpnt + 1) - 
                         diff_packd.GetValueAt(brkpnt) - epsilon;
-                    break;
-                    }
-                }
+                    
                 // cout<<"Interval: \n"<<brk_beg_kval<<"\n"<<query_val<<"\n"<<brk_end_kval<<endl;
                 // cout<<query_val<<endl;
                 // cout<<brk_beg_kval<<" "
@@ -151,15 +150,7 @@ public:
         // query_pred -= epsilon;
         // if(query_pred < int64_t(0)) query_pred = int64_t(0);        
         // if(query_pred > int64_t(total_data_points)-1) query_pred = int64_t(total_data_points)-1;
-        query_pred = std::clamp(query_pred, int64_t(0), int64_t(total_data_points) - 1);
-        
-        if (!isFirstIndexReturned){
-            return data.BinarySearch(query , max(query_pred - epsilon, int64_t(0)), 
-                min(query_pred + epsilon, int64_t(total_data_points)-1), isFirstIndexReturned);
-        }
-        return get_first_index(data.BinarySearch(query , max(query_pred - epsilon, int64_t(0)), 
-                min(query_pred + epsilon, int64_t(total_data_points)-1), isFirstIndexReturned), data);
-
+        return std::clamp(query_pred, int64_t(0), int64_t(total_data_points) - 1);
     }
 
     template<typename RandomIt>
@@ -230,14 +221,92 @@ public:
         }
     }
 
+    // mphf version
     template<typename RandomIt>
-    void build_index(const RandomIt &begin){
-        if(indx_type == BASIC_PLA)
-            build_basic_pla_index(begin);
-        else
-            build_rep_stretch_pla_index(begin);
+    void build_index(const RandomIt &begin){        
+        isFirstIndexReturned = false;
+        build_basic_pla_index(begin);
+        create_err_table(begin);
     }
 
+    template<typename RandomIt>
+    void create_err_table(const RandomIt &data){    
+        int64_t indx = 0, curr_kval, prev_kval;
+        int64_t query_pred, query_err;
+        vector<int64_t> unique_kvals; //keys
+        vector<int64_t> true_err; // to first position
+        while(1){
+            curr_kval = data[indx];
+            // cout<<indx<<" "<<GetKmerAtIndex(indx)<<" "<<curr_kval<<endl;
+            indx++;        
+            if(curr_kval == -1) continue;
+            unique_kvals.emplace_back(curr_kval);
+
+            // query_pred_err = get_query_pred_err(indx-1, curr_kval);
+            query_pred = get_query_pred(curr_kval, data);
+            query_err = (indx - 1) - query_pred;
+            true_err.emplace_back(query_err);
+            prev_kval = curr_kval;
+            // cout<<"cur kval: "<<curr_kval<<" err: "<<query_pred_err.second
+            // <<" act idx: "<<indx-1<<" pred: "<<query_pred_err.first<<endl;
+            break;
+        }
+        // std::cout<<"Main loop err calc\n";    
+        for(int64_t curr_sa_indx=indx; curr_sa_indx<total_data_points; curr_sa_indx++){     
+            // cout<<curr_sa_indx<<" "; 
+            curr_kval = data[curr_sa_indx];
+            if(curr_kval == prev_kval || curr_kval == -1) {
+                // cout<<curr_kval<<endl;
+                continue;
+            }        
+            // cout<<"ok ";
+            unique_kvals.emplace_back(curr_kval);
+            query_pred = get_query_pred(curr_kval, data);
+            query_err = curr_sa_indx - query_pred;
+            // cout<<curr_kval<<" ";
+            true_err.emplace_back(query_err);
+            // cout<<query_pred_err.first<<" "<<fSize<<endl;
+            // pred_vec[query_pred_err.first]++;
+            // cout<<"ok\n";
+            prev_kval = curr_kval;
+            
+        }
+        build_mphf(unique_kvals, true_err);   
+    }
+
+    void build_mphf(vector<int64_t>& keys, vector<int64_t>& true_err){
+        pthash::build_configuration config;
+        config.c = 5.0;
+        config.alpha = 0.94;
+        config.minimal_output = true;  // mphf
+        config.verbose_output = false;
+        
+        auto start = pthash::clock_type::now();
+        auto timings = f.build_in_internal_memory(keys.begin(), keys.size(), config);
+        double total_seconds = timings.partitioning_seconds + timings.mapping_ordering_seconds +
+                            timings.searching_seconds + timings.encoding_seconds;
+        // ofstream mphf_time("mphf_time"+to_string(epsilon)+".txt");
+        // mphf_time << "function built in " << pthash::seconds(pthash::clock_type::now() - start) << " seconds"
+        //         << std::endl;
+        cout << "function built in " << pthash::seconds(pthash::clock_type::now() - start) << " seconds"
+                << std::endl;
+        // mphf_time << "computed: " << total_seconds << " seconds" << std::endl;
+        /* Compute and print the number of bits spent per key. */
+        double bits_per_key = static_cast<double>(f.num_bits()) / f.num_keys();
+        // mphf_time << "function uses " << bits_per_key << " [bits/key]" << std::endl;
+        cout << "function uses " << bits_per_key << " [bits/key]" << std::endl;
+
+        // storing the err values in the index from MPHF and Bitpack it
+        vector<int64_t>err_dict(keys.size());
+        err_dict.resize(keys.size());
+        for(uint64_t i=0 ;i<keys.size(); i++){
+            err_dict[f(keys[i])] = true_err[i];
+            // if(keys[i] == 0){
+            //     cout<<"mphf: "<<f(keys[i])<<" true err: "<<true_err[i]<<endl;
+            // }
+        }
+        err_dict_packed.BuilidSignedPackedVector(err_dict);
+    }
 
     template<typename RandomIt>
     void build_basic_pla_index(const RandomIt &begin){
@@ -346,5 +415,6 @@ public:
         y_range_beg.encode(brk_sa_indx_vec.data(), brk_sa_indx_vec.size());
         encode_knots(brk_kval_vec);
         if(isFirstIndexReturned) calc_index_bv(begin);
+        cout<<"#Segments: "<<dic_size<<endl;
     }
 };

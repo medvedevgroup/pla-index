@@ -2,3 +2,5 @@ Dataset/
 executables/
 libdivsufsort/build/
 tests/.snakemake
+tests/*.txt
+tests/config.yaml

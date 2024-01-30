@@ -6,8 +6,6 @@
 #include "suffix_array.h"
 
 int main(int argc, char **argv){
-    // NFiltered Concatenated single string
-    // No new line at the last character
     string gn_fn = argv[1]; 
     string sa_fn = argv[2];
     int64_t kmer_size = stoi(argv[3]);
@@ -25,11 +23,15 @@ int main(int argc, char **argv){
     }
     
     INDX_TYPE it;
-    if (indx_type == "basic-pla") it = BASIC_PLA;    
-    else if(indx_type == "repeat-pla") it = REPEAT_PLA;
-    else{
-        throw std::logic_error("indx type can be either basic-pla or repeat-pla");
+    if(indx_type != "exact-pla"){
+        throw std::logic_error("indx type can only be exact-pla in this version");
     }
+    it = EXACT_PLA;
+    // if (indx_type == "basic-pla") it = BASIC_PLA;    
+    // else if(indx_type == "repeat-pla") it = REPEAT_PLA;
+    // else{
+    //     throw std::logic_error("indx type can be either basic-pla or repeat-pla");
+    // }
 
     suffix_array<int64_t> sa;
     sa.Load(gn_fn, sa_fn, kmer_size);
@@ -40,9 +42,9 @@ int main(int argc, char **argv){
     pla.build_index(sa.begin());
     auto s2 = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = s2-s1;
-
+    cout<<"Number of segments: "<<pla.get_num_knots()<<endl;
+    cout<<"Total size in bytes: "<<pla.get_total_size_in_bytes()<<endl;
     ofstream indx_time(indx_fn+"_build_time.txt", std::ios_base::app);
-    cout<<"Number of segments: "<<pla.get_num_segments()<<endl;
     indx_time<<"Indx file: "<<indx_fn<<endl;
     indx_time<<"Elapsed seconds in index construction: "<<elapsed_seconds.count()<<" sec"<<endl;
     cout<<"Elapsed seconds in index construction: "<<elapsed_seconds.count()<<" sec"<<endl;

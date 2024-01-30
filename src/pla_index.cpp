@@ -7,7 +7,8 @@ pla_index::pla_index(int64_t eps, int64_t lp_bits, uint64_t largest,
             lp_bits(lp_bits), isFirstIndexReturned(isFirstIndxRet),
             indx_type(it),
             total_data_points(total_points),
-            brk_uniform_diff_packed(true), diff_packd(true)
+            brk_uniform_diff_packed(true), diff_packd(true),
+            err_dict_packed(true)
 {
     uint64_t bits;
     if(ceil(log2(largest)) == floor(log2(largest))) bits = ceil(log2(largest)) + 1;
@@ -24,7 +25,8 @@ pla_index::pla_index(int64_t knot_bs_thres, uint64_t largest,
     knot_bs_thres(knot_bs_thres), 
     total_data_points(total_points),
     indx_type(it),
-    brk_uniform_diff_packed(true), diff_packd(true)
+    brk_uniform_diff_packed(true), diff_packd(true),
+    err_dict_packed(true)
 {
     uint64_t bits;
     if(ceil(log2(largest)) == floor(log2(largest))) bits = ceil(log2(largest)) + 1;
@@ -93,7 +95,11 @@ const vector<uint64_t> pla_index::get_processed_ind_vec() const{
 }
 
 void pla_index::Load(string dic_fn, int64_t total_bits){
+    uint64_t total_bytes = essentials::load(f, dic_fn.c_str());
     std::ifstream is(dic_fn, std::ios::binary);
+    std::streampos current_position = is.tellg();
+    is.seekg(total_bytes, std::ios::beg);
+
     uint8_t lp_bits_t;
     // is.read(reinterpret_cast<char*>(&lp_bits_t), sizeof(lp_bits_t));
     essentials_arank::load_pod(is, lp_bits_t);
@@ -118,56 +124,41 @@ void pla_index::Load(string dic_fn, int64_t total_bits){
     // is.read(reinterpret_cast<char*>(&dic_size_t), sizeof(dic_size_t));
     
     dic_size = dic_size_t;
-    // cout<<"#breakpoints: "<<dic_size<<endl;
+    cout<<"#breakpoints: "<<dic_size<<endl;
     // brk_uniform_diff_packed.Load(fp, dic_size);
     brk_uniform_diff_packed.Load_is(is, dic_size);
     max_data_ratio = ((1ULL << total_bits) - 1)/(dic_size-1);
-    if (indx_type == REPEAT_PLA)
-        sa_diff_dac_vec.load(is);
-    else if(indx_type == BASIC_PLA)
-        diff_packd.Load_is(is, dic_size-1);
+    diff_packd.Load_is(is, dic_size-1);    
     
-    // cout<<"ef load\n";
     y_range_beg.load(is);
     // cout<<"max err load\n";
     uint16_t max_error_t;
     essentials_arank::load_pod(is, max_error_t);
-    // is.read(reinterpret_cast<char*>(&max_error_t), sizeof(max_error_t));
-    // err = fread(&max_error_t, sizeof(uint16_t), 1, fp);
     epsilon = (int64_t)max_error_t;
-    essentials_arank::load_pod(is, isFirstIndexReturned);
-    if(isFirstIndexReturned){
-        int64_t bitvec_size = total_data_points/64 + 1;
-        index_bitvec.resize(bitvec_size);
-        is.read(reinterpret_cast<char*>(index_bitvec.data()), 
-            static_cast<std::streamsize>(sizeof(uint64_t) * bitvec_size));  
-        // err = fread(&index_bitvec[0], sizeof(uint64_t), bitvec_size, fp);
-    }
+
+    uint64_t unique_kmers;
+    essentials_arank::load_pod(is, unique_kmers);
+    err_dict_packed.Load_is(is, unique_kmers);
+    
 }
 
 void pla_index::save_unpacked(string dic_fn){
     dic_fn = dic_fn + ".unpacked";
-    std::ofstream os(dic_fn, std::ios::binary);
+    essentials::save(f, dic_fn.c_str());
+    std::ofstream os(dic_fn, std::ios_base::app);
     uint8_t t_lp_bits = lp_bits;
     essentials_arank::save_pod(os, t_lp_bits);
     os.write(reinterpret_cast<char const*>(indirection_vec.data()),
                   indirection_vec.size() * sizeof(uint64_t));
     uint32_t nBrkpnts = dic_size;
     essentials_arank::save_pod(os, nBrkpnts);
-    
-    if (indx_type == REPEAT_PLA)
-        sa_diff_dac_vec.serialize(os);
-    else if(indx_type == BASIC_PLA)
-        diff_packd.Save_os(os);
-    
+    diff_packd.Save_os(os);
     y_range_beg.save(os);
     uint16_t t_err_th = epsilon;
     essentials_arank::save_pod(os, t_err_th);
-    essentials_arank::save_pod(os, isFirstIndexReturned);
-    if(isFirstIndexReturned){
-        os.write(reinterpret_cast<char const*>(index_bitvec.data()),
-                  index_bitvec.size() * sizeof(uint64_t));
-    }
+    uint64_t uniq_kmers = err_dict_packed.GetNumElements();
+    essentials_arank::save_pod(os, uniq_kmers);
+    err_dict_packed.Save_os(os);
 }
 
 void pla_index::save_bit_info(string dic_fn, CBitPacking& ind_diff_pack){
@@ -176,34 +167,30 @@ void pla_index::save_bit_info(string dic_fn, CBitPacking& ind_diff_pack){
     string suff = dic_fn.substr(pos);
     string bit_fn = pref+"_bitInfo"+suff;
     ofstream bit_info(bit_fn.c_str());
-    bit_info<<"#Segments: "<<dic_size<<endl;
+    bit_info<<"#Breakpoints: "<<dic_size<<endl;
+    bit_info<<"#Unique kmers: "<<err_dict_packed.GetNumElements()<<endl;
     bit_info<<"Indirection vector: each: "<<uint64_t(ind_diff_pack.GetPacketSize())<<endl;
-    bit_info<<"knot kmers: each: "<<uint64_t(brk_uniform_diff_packed.GetPacketSize())<<endl;
+    bit_info<<"knot kmers: each: "<<uint64_t(brk_uniform_diff_packed.GetPacketSize())<<endl;    
     bit_info<<"Y beg each: "<<ceil(y_range_beg.num_bits()/dic_size)<<endl;
-    if (indx_type == REPEAT_PLA)
-        bit_info<<"Y end diff: each: "<<
-            ceil((size_in_bytes(sa_diff_dac_vec)*8.0)/sa_diff_dac_vec.size())<<endl;
-    else if(indx_type == BASIC_PLA)
-        bit_info<<"Y end diff: each: "<<uint64_t(diff_packd.GetPacketSize())<<endl;        
+    bit_info<<"Y end diff: each: "<<uint64_t(diff_packd.GetPacketSize())<<endl;        
+    bit_info<<"True err each: "<<uint64_t(err_dict_packed.GetPacketSize())<<endl;
+    bit_info<<"MPHF bits per key: "<<static_cast<double>(f.num_bits()) / f.num_keys()<<endl;;
+
     bit_info.close();
 }
 
-uint64_t pla_index::get_size_in_bytes(){
-    uint64_t total_size_in_bits = indirection_vec.size()*sizeof(uint64_t) + 
+uint64_t pla_index::get_total_size_in_bytes(){
+    uint64_t total_size_in_bits = indirection_vec.size()*sizeof(uint64_t) +
             uint64_t(brk_uniform_diff_packed.GetPacketSize())*brk_uniform_diff_packed.GetNumElements() +
-            y_range_beg.num_bits();
-    if(indx_type == BASIC_PLA){
-        total_size_in_bits += uint64_t(diff_packd.GetPacketSize())*diff_packd.GetNumElements();
-    }
-    else if(indx_type == REPEAT_PLA){
-        total_size_in_bits += size_in_bytes(sa_diff_dac_vec)*8.0;
-    }
-    if(isFirstIndexReturned) total_size_in_bits += index_bitvec.size()*sizeof(uint64_t);
-    return total_size_in_bits/8;
+            y_range_beg.num_bits() + uint64_t(diff_packd.GetPacketSize())*diff_packd.GetNumElements() +
+            uint64_t(err_dict_packed.GetPacketSize())*err_dict_packed.GetNumElements() +
+            f.num_bits();
+    return total_size_in_bits / 8;
 }
 
 void pla_index::Save(string dic_fn){
-    std::ofstream os(dic_fn, std::ios::binary);
+    essentials::save(f, dic_fn.c_str());
+    std::ofstream os(dic_fn, std::ios_base::app);
     uint8_t t_lp_bits = lp_bits;
     essentials_arank::save_pod(os, t_lp_bits);
     vector<uint64_t> ind_diff_vec = get_processed_ind_vec();
@@ -213,26 +200,17 @@ void pla_index::Save(string dic_fn){
     uint32_t nBrkpnts = dic_size;
     
     essentials_arank::save_pod(os, nBrkpnts);
-    // os.write(reinterpret_cast<char const*>(&nBrkpnts),
-                //   sizeof(nBrkpnts));
     
     brk_uniform_diff_packed.Save_os(os);
-
-    if (indx_type == REPEAT_PLA)
-        sa_diff_dac_vec.serialize(os);
-    else if(indx_type == BASIC_PLA)
-        diff_packd.Save_os(os);
-
+    diff_packd.Save_os(os);
     y_range_beg.save(os);
     uint16_t t_err_th = epsilon;
     essentials_arank::save_pod(os, t_err_th);
-    // os.write(reinterpret_cast<char const*>(&t_err_th),
-    //               sizeof(t_err_th));
-    essentials_arank::save_pod(os, isFirstIndexReturned);
-    if(isFirstIndexReturned){
-        os.write(reinterpret_cast<char const*>(index_bitvec.data()),
-                  index_bitvec.size() * sizeof(uint64_t));
-    }
+
+    uint64_t uniq_kmers = err_dict_packed.GetNumElements();
+    essentials_arank::save_pod(os, uniq_kmers);
+    err_dict_packed.Save_os(os);
+
 
     // save_unpacked(dic_fn);
     // save_bit_info(dic_fn, ind_diff_pack);
