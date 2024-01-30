@@ -9,13 +9,15 @@ pla-index allows faster query of a k-mer rank function using an index that is cr
 
 # Quick Start
 
+## Installation
+
 Clone the repo using:
 
 ```shell
 git clone --recursive https://github.com/medvedevgroup/pla-index.git
 ```
 
-This repository has two other branches.
+This repository has two other branches for read aligner and exact-pla.\
 To use the read aligner application, run the following command:
 ```shell
 git checkout strobealign-application
@@ -26,39 +28,44 @@ To use the exact-pla, run the following command:
 git checkout pla-index-exact
 ```
 
-To filter 'N' from a genome:
-
+To compile from sources:
+```shell
+cd pla-index
+mkdir build; cd build; cmake ..; make -j 4
 ```
-cd tests
-mkdir -p ../executables
-g++ ../src/FilterNConcatFasta.cpp -o ../executables/FilterNConcatFasta
-
-../executables/FilterNConcatFasta FASTA-FILE OUTPUT-PREFIX
-
-Parameter description:
-FASTA-FILE: Fasta file on which pla-index will be built
-OUTPUT-PREFIX: The output file name format is OUTPUT-PREFIX.ConcatenatedGenome.txt
-```
-Here on, we assume we are still inside the `tests` folder.
 
 To construct suffix array we use [libdivsufsort](https://github.com/hasin-abrar/libdivsufsort) tool. 
 We modify it slightly to allow 64 bit integers. 
 To construct the suffix array builder tool `mksary`:
 ```
 cd ../libdivsufsort
-mkdir build
-cd build
+mkdir build_sa
+cd build_sa
 cmake -DCMAKE_BUILD_TYPE="Release" \
 -DCMAKE_INSTALL_PREFIX="/usr/local" ..
 sed -i 's/int32_t/int64_t/g' include/divsufsort.h
 make
+cp examples/mksary ../../build/
+```
+
+## Usage
+
+Now, all the executables are inside the `build` folder. 
+Here on, we assume we are inside this folder.
+
+To filter 'N' from a genome:
+```
+./filterNConcat FASTA-FILE OUTPUT-PREFIX
+
+Parameter description:
+FASTA-FILE: Fasta file on which pla-index will be built
+OUTPUT-PREFIX: The output file name format is OUTPUT-PREFIX.ConcatenatedGenome.txt
 ```
 
 To construct suffix array on the concatenated genome:
 
 ```
-cd ../tests/
-../libdivsufsort/build/examples/mksary GENOME SUFFIX-ARRAY
+./mksary GENOME SUFFIX-ARRAY
 
 Parameter description:
 GENOME: Concatenated genome without 'N'
@@ -67,9 +74,7 @@ SUFFIX-ARRAY: Name of the binary file where suffix array will be stored
 
 To build the index:
 ```
-g++ -std=c++17 -Ofast -mbmi2 -msse4.2 -DNDEBUG -march=native -I SDSL_INCLUDE_FOLDER -L SDSL_LIBRARY_FOLDER ../src//build_index.cpp ../src//BitPacking.cpp ../src//pla_index.cpp -o ../executables//build_index -lsdsl -ldivsufsort -ldivsufsort64
-
-../executables//build_index GENOME SUFFIX-ARRAY KMER-SIZE EPS INDEX-NAME L-VALUE INDEX-TYPE QUERY-TYPE
+./build_index GENOME SUFFIX-ARRAY KMER-SIZE EPS INDEX-NAME L-VALUE INDEX-TYPE QUERY-TYPE
 
 Parameter description:
 
@@ -85,9 +90,7 @@ QUERY-TYPE: Whether to do "search" or "rank" query afterwards
 
 To construct query files:
 ```
-g++ ../src/CreateQueries.cpp -o ../executables/CreateQueries
-
-../executables/CreateQueries GENOME SUFFIX-ARRAY PREFIX KMER-SIZE NO-OF-QUERIES NO-OF-FILES
+./create_queries GENOME SUFFIX-ARRAY PREFIX KMER-SIZE NO-OF-QUERIES NO-OF-FILES
 
 Parameter description:
 
@@ -101,9 +104,7 @@ NO-OF-FILES: How many query files to construct
 
 To query the index:
 ```
-g++ -std=c++17 -Ofast -mbmi2 -msse4.2 -DNDEBUG -march=native -I SDSL_INCLUDE_FOLDER -L SDSL_LIBRARY_FOLDER ../src//benchmark_index.cpp ../src//BitPacking.cpp ../src//pla_index.cpp -o ../executables//benchmark_index -lsdsl -ldivsufsort -ldivsufsort64
-
-../executables//benchmark_index GENOME SUFFIX-ARRAY KMER-SIZE QUERY-FILE INDEX-NAME RUNINFO-FILE INDEX-TYPE QUERY-TYPE
+./benchmark_index GENOME SUFFIX-ARRAY KMER-SIZE QUERY-FILE INDEX-NAME RUNINFO-FILE INDEX-TYPE QUERY-TYPE
 
 Parameter description:
 GENOME: Whole genome string concatenated filtered by 'N'
