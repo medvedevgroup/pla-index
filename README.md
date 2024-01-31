@@ -64,26 +64,13 @@ cp examples/mksary ../../build/
 ## Usage
 
 Now, all the executables are inside the `pla-index/build` folder. 
-Here on, we assume we are inside this folder.
 
-To filter 'N' from a genome:
-```
-./filterNConcat FASTA-FILE OUTPUT-PREFIX
-
-Parameter description:
-FASTA-FILE: [string], Fasta file on which pla-index will be built
-OUTPUT-PREFIX: [string], The output file name format is OUTPUT-PREFIX.ConcatenatedGenome.txt
-```
-
-To construct suffix array on the concatenated genome:
-
-```
-./mksary GENOME SUFFIX-ARRAY
-
-Parameter description:
-GENOME: [string], Concatenated genome without 'N'
-SUFFIX-ARRAY: [string], Name of the binary file where suffix array will be stored
-```
+We follow the following format at the input for both building and querying pla-index:
+- The genome is string is filtered by 'N', and concatenated to be a single string
+- The suffix array is a binary file of consecutive 64 bit integers (values at the suffix array indices)
+- Index type can be either "basic-pla" or "repeat-pla"
+- Query type can be either "search" or "rank" query
+- Query file contains same length kmers (one per line)
 
 To build the index:
 ```
@@ -101,74 +88,20 @@ INDEX-TYPE: [string], Whether to build "basic-pla" or "repeat-pla"
 QUERY-TYPE: [string], Whether to do "search" or "rank" query afterwards
 ```
 
-To construct query files:
-```
-./create_queries GENOME SUFFIX-ARRAY PREFIX KMER-SIZE NO-OF-QUERIES NO-OF-FILES
 
-Parameter description:
-
-GENOME: [string], Whole genome string concatenated filtered by 'N'
-SUFFIX-ARRAY: [string], Suffix array for GENOME in a binary file
-PREFIX: [string], File name prefix of the query file
-KMER-SIZE: [int], Kmer size to be used to construct the index
-NO-OF-QUERIES: [int], How many query k-mers to randomly construct
-NO-OF-FILES: [int], How many query files to construct
-```
 
 To query the index:
 ```
-./benchmark_index GENOME SUFFIX-ARRAY KMER-SIZE QUERY-FILE INDEX-NAME RUNINFO-FILE INDEX-TYPE QUERY-TYPE
+./query_index GENOME SUFFIX-ARRAY KMER-SIZE QUERY-FILE INDEX-NAME RUNINFO-FILE INDEX-TYPE QUERY-TYPE
 
 Parameter description:
 GENOME: [string], Whole genome string concatenated filtered by 'N'
 SUFFIX-ARRAY: [string], Suffix array for GENOME in a binary file
 KMER-SIZE: [int], Kmer size of the query k-mers
+QUERY-FILE: [string], Name of the file containing all the queries (one kmer per line)
 INDEX-NAME: [string], Index file to use 
 RUNINFO-FILE: [string], Where to store the runtime information
 INDEX-TYPE: [string], Type of the stored index ("basic-pla" or "repeat-pla")
 QUERY-TYPE: [string], Whether to do "search" or "rank" query
 ```
 
-## Snakemake
-
-To automate the whole process using snakemake, create a folder containing the genome, binary file of the suffix array and query files.
-The snakemake file assumes the following naming conventions:
-- Genome folder name without any white-spaces(example: GENOME)
-- Concatenated genome without N inside the genome folder needs to be named as GENOME/GENOME.ConcatenatedGenome.txt
-- Binary suffix array file inside the genome folder as GENOME/GENOME.sa.bin
-- Query files with their tag number as GENOME/GENOME.QUERY_TAG.query.txt
-
-For example, let the genome folder name be `ecoli`. 
-Then, we will have three files inside `ecoli` folder: `ecoli/ecoli.ConcatenatedGenome.txt`, `ecoli/ecoli.sa.bin`, and `ecoli/ecoli.1.query.txt` (`1` being the tag number of the query)
-
-Then, create a config file using CreateConfigFile.py
-
-Required Parameters:
-
-| Parameter  | Type    | Description    |
-|-------------|-------------|-------------|
-|--genome_folder | [string] |The name of the folder containing the genome, suffix array and query files|
-|--epsilon |  [int]   |Epsilon value to be used to create pla-index|
-
-Optional parameters with required argument:
-
-| Parameter  | Type    | Description    |
-|-----------------|-------------|-------------|
-|--index_type |[string] | What kind of index type to construct and/or use (default: basic-pla). Possible values: "basic-pla" or "repeat-pla"|
-|--query_type |[string] | What kind of query to do (default: search). Possible values: "search" or "rank"|
-|--kmer_size |[int] | Kmer size for which pla-index will be calculated (default: 21)|
-|--code_path |[string] | Path where the source code is (default: ../src/)|
-|--exec_path |[string] | Path where the executables will be stored (default: ../executables/)|
-|--l_bits |[int] | How many elements to store in the shortcut array, D. &#124;D&#124; = 2<sup>l</sup> (default: 16)|
-|--query_tag |[int] | Which query file to use (default: 1)|
-|--sdsl_lib_path |[string] | Path to the SDSL library folder (default: ~/lib)|
-|--sdsl_inc_path |[string] | Path to the SDSL include folder (defaul: ~/include)|
-
-Here is an example assuming we have the `ecoli` folder inside the `tests` folder:
-
-```
-cd tests
-mkdir -p ../executables
-python3 ../CreateConfigFile.py --genome_folder ecoli --epsilon 15
-snakemake -s ../Snakefile --cores=1 -p
-```

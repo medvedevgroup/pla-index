@@ -36,6 +36,10 @@ fit_segments <- function(segments_fn, genome_len){
   print(paste("Fitted degree (alpha):", a,"Fitted constatnt (Beta): ",c_prime))
 }
 
-segments_fn <- "Gorilla.segments.txt"
-genome_len <- 3595314213
+input_file <- "fit_segment_file.txt"
+lines <- readLines(input_file)
+
+
+segments_fn <- lines[1]
+genome_len <- as.numeric(gsub('"', '',lines[2]))
 fit_segments(segments_fn, genome_len)

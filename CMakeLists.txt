@@ -20,10 +20,10 @@ add_executable(build_index
 )
 target_link_libraries(build_index PUBLIC pla)
 
-add_executable(benchmark_index
-    src/benchmark_index.cpp
+add_executable(query_index
+    src/query_index.cpp
 )
-target_link_libraries(benchmark_index PUBLIC pla)
+target_link_libraries(query_index PUBLIC pla)
 
 add_executable(filterNConcat
     src/FilterNConcatFasta.cpp

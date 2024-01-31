@@ -16,7 +16,7 @@ rule all:
         expand("{fn}/{fn}.query_time_"+config["Indx_Type"]+"_"+config["Eps"]+"_"
             +config["Kmer_Size"]+"_"+indx_suff+".txt", fn=Genomes)
 
-rule build_dictionary:
+rule build:
     input:
         genomeF = "{fn}/{fn}.ConcatenatedGenome.txt", #only bases concatenated
         saF = "{fn}/{fn}.sa.bin"
@@ -45,7 +45,7 @@ rule build_dictionary:
         "{output.index_fn} {params.lp_bits} "
         "{params.indx_type} {params.query_type} "
 
-rule benchmark:
+rule query:
     input:
         index_fn = "{fn}/{fn}.index_"+config["Indx_Type"]+"_"+config["Eps"]+"_"+
             config["Kmer_Size"]+"_"+indx_suff+".bin",
@@ -67,11 +67,11 @@ rule benchmark:
         runInfo = "{fn}/{fn}.query_time_"+config["Indx_Type"]+"_"+config["Eps"]+"_"
             +config["Kmer_Size"]+"_"+indx_suff+".txt"
     shell:
-        "g++ -std=c++17 {params.flags} -I {params.sdsl_include_path} -L {params.sdsl_lib_path} {params.codePath}/benchmark_index.cpp "
+        "g++ -std=c++17 {params.flags} -I {params.sdsl_include_path} -L {params.sdsl_lib_path} {params.codePath}/query_index.cpp "
         "{params.codePath}/BitPacking.cpp {params.codePath}/pla_index.cpp "
-        "-o {params.execPath}/benchmark_index "
+        "-o {params.execPath}/query_index "
         "-lsdsl -ldivsufsort -ldivsufsort64;"
         "/usr/bin/time -f \"%M,%e,%U,%S\" --output-file=memkb_sec_Usec_Ksec_query.txt "
-        "{params.execPath}/benchmark_index {input.genomeF} {input.saF} {params.kmer_size} {input.query_file} "
+        "{params.execPath}/query_index {input.genomeF} {input.saF} {params.kmer_size} {input.query_file} "
         "{input.index_fn}  {output.runInfo} "
         "{params.indx_type} {params.query_type} "

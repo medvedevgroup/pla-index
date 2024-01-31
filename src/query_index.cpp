@@ -63,7 +63,7 @@ int main(int argc, char **argv){
 
     int64_t nQueries = query_kmers_vec.size();
     std::cout<<"Number of queries: "<<nQueries<<std::endl;
-    std::cout<<"Starting benchmarking...\n";
+    std::cout<<"Starting querying...\n";
     // long long sa_idx;
     int _correct = 0;
     
@@ -92,9 +92,7 @@ int main(int argc, char **argv){
     printf("Accuracy: %0.2f %%\n",accuracy);
     runFile<<"Correct: "<<_correct<<" Total: "<<query_kmers_vec.size()<<" Accurancy: "<<accuracy<<"%"<<std::endl;
 
-    // COMMENT LATER
-    // pla.save_unpacked(indx_fn);
-
+    
     return 0;
 }
 
