@@ -1,4 +1,8 @@
 # Reproducibility Information
+`Refseq_dataset.csv` file contains the RefSeq IDs, Kingdom, alpha and beta values of `Table 5` from our paper. 
+`RefseqID_7Genomes.pdf` contains the RefSeq IDs of the genomes from `Table 6`.
+`RefSeq_ID_List.txt` contains the RefSeq IDs of the 549 genomes that were used for analyzing the pla-complexity.
+
 `Snakemake` pipeline can be used to generate the results shown in our paper.
 To do this, run `cmake` as before, as this will genereate the necessary executables to process the data corresponding to the `Snakemake` input.
 

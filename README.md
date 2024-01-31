@@ -7,6 +7,7 @@ pla-index allows faster query of a k-mer rank function using an index that is cr
 - [SDSL](https://github.com/simongog/sdsl-lite/tree/master)
 - cmake (>= 3.16)
 - [Snakemake](https://snakemake.readthedocs.io/en/stable/) (for automating all computations)
+- R (for finding the alpha and beta value from segments vs eps curve fitting)
 
 # Quick Start
 
@@ -84,11 +85,15 @@ KMER-SIZE: [int], Kmer size to be used to construct the index
 EPS: [int], Epsilon value to be used for constructing the pla-index
 INDEX-NAME: [string], File name where to save the index
 L-VALUE: [int], To determine the size of the shortcut array, D. |D| = 2^l
-INDEX-TYPE: [string], Whether to build "basic-pla" or "repeat-pla"
+INDEX-TYPE: [string], Whether to build "basic-pla" or "repeat-pla" index
 QUERY-TYPE: [string], Whether to do "search" or "rank" query afterwards
 ```
 
-
+For example, to build a `basic-pla` index with 21 size k-mer, epsilon value of 15, having |D| = 2<sup>16</sup> and do a `search` query afterwards on the `ecoli` genome inside the `tests/ecoli/` folder:
+```shell
+./build_index ../tests/ecoli/ecoli.ConcatenatedGenome.txt ../tests/ecoli/ecoli.sa.bin 21 15 ../tests/ecoli/ecoli.index.bin 16 basic-pla search
+```
+The built index will be saved on `../tests/ecoli/ecoli.index.bin` file.
 
 To query the index:
 ```
@@ -104,4 +109,15 @@ RUNINFO-FILE: [string], Where to store the runtime information
 INDEX-TYPE: [string], Type of the stored index ("basic-pla" or "repeat-pla")
 QUERY-TYPE: [string], Whether to do "search" or "rank" query
 ```
+
+For example, to do `search` query with the provided `tests/ecoli/ecoli.1.query.txt` on the built `tests/ecoli/ecoli.index.bin` one can do the following:
+```shell
+./query_index ../tests/ecoli/ecoli.ConcatenatedGenome.txt ../tests/ecoli/ecoli.sa.bin 21 ../tests/ecoli/ecoli.1.query.txt ../tests/ecoli/ecoli.index.bin ../tests/ecoli/ecoli.query_time.txt basic-pla search
+```
+The query time information will be stored in the `../tests/ecoli/ecoli.query_time.txt` file.
+
+# Reproducibility
+
+To reproduce the results shown in our paper, one can follow the `README` file inside the `Reproducibility` folder.
+
 
