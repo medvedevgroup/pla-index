@@ -4,26 +4,20 @@
 #include <sstream>
 #include "pla_index.hpp"
 #include "suffix_array.h"
+#include "cmdline.hpp"
 
 int main(int argc, char **argv){
-    // NFiltered Concatenated single string
-    // No new line at the last character
-    string gn_fn = argv[1]; 
-    string sa_fn = argv[2];
-    int64_t kmer_size = stoi(argv[3]);
-    int64_t eps = stoi(argv[4]);
-    string indx_fn = argv[5];
-    int64_t lp_bits = stoi(argv[6]);
-    string indx_type = argv[7];
-    string query_type = argv[8];
-    bool isFirstIndexReturned;
-
-    if (query_type == "search") isFirstIndexReturned = false;
-    else if(query_type == "rank") isFirstIndexReturned = true;
-    else{
-        throw std::logic_error("query type can be either search or rank");
-    }
+    auto opt = parse_command_line_arguments_build(argc, argv);
     
+    string gn_fn = opt.gn_fn; 
+    string sa_fn = opt.sa_fn;
+    int64_t kmer_size = opt.kmer_size;
+    int64_t eps = opt.eps;
+    string indx_fn = opt.indx_fn;
+    int64_t lp_bits = opt.lp_bits;
+    string indx_type = opt.indx_type;
+    bool is_fast_rank = opt.is_fast_rank;
+
     INDX_TYPE it;
     if (indx_type == "basic-pla") it = BASIC_PLA;    
     else if(indx_type == "repeat-pla") it = REPEAT_PLA;
@@ -32,22 +26,21 @@ int main(int argc, char **argv){
     }
 
     suffix_array<int64_t> sa;
-    sa.Load(gn_fn, sa_fn, kmer_size);
+    sa.Load(gn_fn, sa_fn);
+    sa.set_kmer_size(kmer_size);
 
-    pla_index pla(eps, lp_bits, sa.get_largest(), isFirstIndexReturned, sa.size(), it);
+    pla_index pla(eps, lp_bits, sa.get_largest(), is_fast_rank, sa.size(), it);
 
     auto s1 = std::chrono::system_clock::now();
     pla.build_index(sa.begin());
     auto s2 = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = s2-s1;
 
-    ofstream indx_time(indx_fn+"_build_time.txt", std::ios_base::app);
     cout<<"Number of segments: "<<pla.get_num_segments()<<endl;
-    indx_time<<"Indx file: "<<indx_fn<<endl;
-    indx_time<<"Elapsed seconds in index construction: "<<elapsed_seconds.count()<<" sec"<<endl;
+    cout<<"Indx file: "<<indx_fn<<endl;
     cout<<"Elapsed seconds in index construction: "<<elapsed_seconds.count()<<" sec"<<endl;
 
-    pla.Save(indx_fn);
+    pla.Save(indx_fn, sa);
 
     return 0;
 }

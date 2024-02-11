@@ -27,7 +27,7 @@ private:
     using canonical_segment = typename OptimalPiecewiseLinearModel<int64_t, uint64_t>::CanonicalSegment;
     int64_t epsilon, max_data_ratio, lp_bits, knot_bs_thres;
     uint64_t shift_bits, dic_size, total_data_points;
-    bool isFirstIndexReturned;
+    bool is_fast_rank, is_rank_query;
     
     vector<uint64_t> indirection_vec, index_bitvec;
 
@@ -38,28 +38,32 @@ private:
 
 public:
     pla_index(int64_t eps, int64_t lp_bits, uint64_t largest,
-            bool isFirstIndxRet, uint64_t total_points, INDX_TYPE indx_type);
+            bool is_fast_rank, uint64_t total_points, INDX_TYPE indx_type);
     
-    pla_index(int64_t knot_bs_thres, uint64_t largest, 
-        uint64_t total_points, string dic_fn, INDX_TYPE indx_type);
+    pla_index(int64_t knot_bs_thres, bool is_rank_query);
 
     void insert_to_ind_vec(int64_t brk_beg_kval, int64_t brk_indx);
 
     void encode_knots(const vector<int64_t> &brk_kval_vec);    
     
     void SetBit(uint64_t &number, uint64_t pos);
-    void Save(string dic_fn);
-    void save_unpacked(string dic_fn);
-    void save_bit_info(string dic_fn, CBitPacking &ind_diff_pack);
+    void save_unpacked(string indx_fn);
+    void save_bit_info(string indx_fn, CBitPacking &ind_diff_pack);
     uint64_t get_size_in_bytes();
     inline uint64_t get_num_segments() const {return dic_size;}
 
     const vector<uint64_t> get_processed_ind_vec() const;
-    void Load(string dic_fn, int64_t total_bits);
     int64_t binary_search(int64_t lo, int64_t hi, const int64_t kval) const;
     
     template <typename DataType>
-    uint64_t get_first_index(uint64_t idx, const DataType &data) const{
+    uint64_t get_first_index(int64_t idx, const uint64_t query_val, 
+            const DataType &data) const{
+        if(!is_fast_rank){
+            while(1){
+                if(--idx < 0) return data.get_sa_val(0);
+                if(data[idx] != query_val) return data.get_sa_val(idx+1);
+            }
+        }
         uint64_t bv_idx = idx >> 6; // x/64
         uint64_t bv_pos = idx - (bv_idx<<6) + 1; // x%64 +1
         uint64_t mask = 1ULL << (64-bv_pos); // pos = [1, 64]
@@ -79,8 +83,141 @@ public:
             mask <<= 1;
         }        
     }
+
+    // suffix array version
+    template <typename DataType>
+    void Save(string indx_fn, DataType& data){
+        std::ofstream os(indx_fn, std::ios::binary);
+        /**
+         * Set flags x 
+         * whether indirection settings -> kmer size is stored [nth bit]
+         * what kind of dictionary [n-1]
+         * is fast rank enabled [n-2]
+        */
+        uint8_t flag_bits;
+        if(data.is_kmer_size_needed()) flag_bits = 1;
+        if(indx_type == BASIC_PLA) flag_bits |= 2;
+        if(is_fast_rank) flag_bits |= 4;
+        essentials_arank::save_pod(os, flag_bits);
+
+        if(data.is_kmer_size_needed()){
+            uint8_t kmer_size = data.get_kmer_size();
+            essentials_arank::save_pod(os, kmer_size);
+        }
+
+        uint8_t t_lp_bits = lp_bits;
+        essentials_arank::save_pod(os, t_lp_bits);
+        vector<uint64_t> ind_diff_vec = get_processed_ind_vec();
+        CBitPacking ind_diff_pack(false);
+        ind_diff_pack.BuilidPackedVector(ind_diff_vec);
+        ind_diff_pack.Save_os(os);
+        uint32_t nBrkpnts = dic_size;
+        
+        essentials_arank::save_pod(os, nBrkpnts);
+        // os.write(reinterpret_cast<char const*>(&nBrkpnts),
+                    //   sizeof(nBrkpnts));
+        
+        brk_uniform_diff_packed.Save_os(os);
+
+        if (indx_type == REPEAT_PLA)
+            sa_diff_dac_vec.serialize(os);
+        else if(indx_type == BASIC_PLA)
+            diff_packd.Save_os(os);
+
+        y_range_beg.save(os);
+        uint16_t t_err_th = epsilon;
+        essentials_arank::save_pod(os, t_err_th);
+        // os.write(reinterpret_cast<char const*>(&t_err_th),
+        //               sizeof(t_err_th));
+        essentials_arank::save_pod(os, is_fast_rank);
+        if(is_fast_rank){
+            os.write(reinterpret_cast<char const*>(index_bitvec.data()),
+                    index_bitvec.size() * sizeof(uint64_t));
+        }
+
+        // save_unpacked(indx_fn);
+        // save_bit_info(indx_fn, ind_diff_pack);
+    }
     
-    
+    // suffix array version
+    template <typename DataType>
+    void Load(string indx_fn, DataType &data){
+        /**
+         * Load flags x 
+         * whether indirection settings -> kmer size is stored [nth bit]
+         * what kind of dictionary [n-1]
+         * is fast rank enabled [n-2]
+        */
+        std::ifstream is(indx_fn, std::ios::binary);
+        uint8_t flag_bits;
+        essentials_arank::load_pod(is, flag_bits);
+        bool is_kmer_used = false;
+        if(flag_bits & 1) is_kmer_used = true;
+        if(flag_bits & 2) indx_type = BASIC_PLA;
+        else indx_type = REPEAT_PLA;
+        if(flag_bits & 4) is_fast_rank = true;
+        else is_fast_rank = false;
+
+        if (is_kmer_used){
+            uint8_t t_kmer_size;
+            essentials_arank::load_pod(is, t_kmer_size);
+            data.set_kmer_size(t_kmer_size);
+        }
+        uint64_t largest = data.get_largest();
+        uint64_t total_bits;
+        if(ceil(log2(largest)) == floor(log2(largest))) total_bits = ceil(log2(largest)) + 1;
+        else total_bits = ceil(log2(largest));
+        
+        uint8_t lp_bits_t;
+        // is.read(reinterpret_cast<char*>(&lp_bits_t), sizeof(lp_bits_t));
+        essentials_arank::load_pod(is, lp_bits_t);
+        lp_bits = lp_bits_t;
+        shift_bits = total_bits - lp_bits;
+        
+        uint64_t indir_max = 1ULL << lp_bits;
+
+        CBitPacking ind_diff_pack(false);
+        ind_diff_pack.Load_is(is, (indir_max-1));
+        // cout<<"ind diff vec isze: "<<indir_max-1<<endl;
+        vector<int64_t> indir_diff_vec = ind_diff_pack.GetUnpackedVector();
+        // indirection_table = new int64_t[indir_max];
+        indirection_vec.resize(indir_max);
+        indirection_vec[0] = 0;
+        for(int64_t i=0; i<indir_max-1; i++){
+            indirection_vec[i+1] = indirection_vec[i] + indir_diff_vec[i];
+        }
+        // how many breakpoints
+        uint32_t dic_size_t;
+        essentials_arank::load_pod(is, dic_size_t);
+        // is.read(reinterpret_cast<char*>(&dic_size_t), sizeof(dic_size_t));
+        
+        dic_size = dic_size_t;
+        // cout<<"#breakpoints: "<<dic_size<<endl;
+        // brk_uniform_diff_packed.Load(fp, dic_size);
+        brk_uniform_diff_packed.Load_is(is, dic_size);
+        max_data_ratio = ((1ULL << total_bits) - 1)/(dic_size-1);
+        if (indx_type == REPEAT_PLA)
+            sa_diff_dac_vec.load(is);
+        else if(indx_type == BASIC_PLA)
+            diff_packd.Load_is(is, dic_size-1);
+        
+        // cout<<"ef load\n";
+        y_range_beg.load(is);
+        // cout<<"max err load\n";
+        uint16_t max_error_t;
+        essentials_arank::load_pod(is, max_error_t);
+        // is.read(reinterpret_cast<char*>(&max_error_t), sizeof(max_error_t));
+        // err = fread(&max_error_t, sizeof(uint16_t), 1, fp);
+        epsilon = (int64_t)max_error_t;
+        essentials_arank::load_pod(is, is_fast_rank);
+        if(is_fast_rank){
+            int64_t bitvec_size = total_data_points/64 + 1;
+            index_bitvec.resize(bitvec_size);
+            is.read(reinterpret_cast<char*>(index_bitvec.data()), 
+                static_cast<std::streamsize>(sizeof(uint64_t) * bitvec_size));  
+            // err = fread(&index_bitvec[0], sizeof(uint64_t), bitvec_size, fp);
+        }
+    }
 
     // suffix array version
     template <typename DataType>
@@ -153,12 +290,12 @@ public:
         // if(query_pred > int64_t(total_data_points)-1) query_pred = int64_t(total_data_points)-1;
         query_pred = std::clamp(query_pred, int64_t(0), int64_t(total_data_points) - 1);
         
-        if (!isFirstIndexReturned){
+        if (!is_rank_query){
             return data.BinarySearch(query , max(query_pred - epsilon, int64_t(0)), 
-                min(query_pred + epsilon, int64_t(total_data_points)-1), isFirstIndexReturned);
+                min(query_pred + epsilon, int64_t(total_data_points)-1), is_rank_query);
         }
         return get_first_index(data.BinarySearch(query , max(query_pred - epsilon, int64_t(0)), 
-                min(query_pred + epsilon, int64_t(total_data_points)-1), isFirstIndexReturned), data);
+                min(query_pred + epsilon, int64_t(total_data_points)-1), is_rank_query), query_val, data);
 
     }
 
@@ -287,7 +424,7 @@ public:
         diff_packd.BuilidSignedPackedVector(brk_diff_vec);        
         y_range_beg.encode(brk_sa_indx_vec.data(), brk_sa_indx_vec.size());
         encode_knots(brk_kval_vec);
-        if(isFirstIndexReturned) calc_index_bv(begin);
+        if(is_fast_rank) calc_index_bv(begin);
     }
 
     template<typename RandomIt>
@@ -345,6 +482,6 @@ public:
         sa_diff_dac_vec = temp;
         y_range_beg.encode(brk_sa_indx_vec.data(), brk_sa_indx_vec.size());
         encode_knots(brk_kval_vec);
-        if(isFirstIndexReturned) calc_index_bv(begin);
+        if(is_fast_rank) calc_index_bv(begin);
     }
 };

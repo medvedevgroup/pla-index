@@ -99,4 +99,17 @@ inline uint64_t select_in_word(const uint64_t x, const uint64_t k) {
     return select64(x, k);
 }
 
+// Function to trim whitespace from the start and end of a string
+inline std::string trim_string(const std::string& str) {
+    size_t first = str.find_first_not_of(" \t\n\r");
+    size_t last = str.find_last_not_of(" \t\n\r");
+
+    if (first == std::string::npos || last == std::string::npos) {
+        // String contains only whitespace
+        return "";
+    }
+
+    return str.substr(first, last - first + 1);
+}
+
 }  // namespace arank::util

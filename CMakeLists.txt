@@ -10,9 +10,10 @@ set(CMAKE_CXX_FLAGS  "-Ofast -mbmi2 -msse4.2 -DNDEBUG -march=native")
 add_library(pla STATIC 
   src/BitPacking.cpp
   src/pla_index.cpp
+  src/cmdline.cpp
 )
-target_include_directories(pla PUBLIC  /home/hasin/include/ ) 
-target_link_directories(pla PUBLIC /home/hasin/lib/) 
+target_include_directories(pla PUBLIC  /research/mqa6002/Softwares/Installed/include/ ) 
+target_link_directories(pla PUBLIC /research/mqa6002/Softwares/Installed/lib/) 
 target_link_libraries(pla PUBLIC sdsl divsufsort divsufsort64)
 
 add_executable(build_index 
@@ -25,8 +26,8 @@ add_executable(query_index
 )
 target_link_libraries(query_index PUBLIC pla)
 
-add_executable(filterNConcat
-    src/FilterNConcatFasta.cpp
+add_executable(process_fasta
+    src/process_fasta.cpp
 )
 
 add_executable(create_queries

@@ -2,6 +2,7 @@
 #include <fstream>
 #include "pla_index.hpp"
 #include "suffix_array.h"
+#include "cmdline.hpp"
 
 using namespace std::chrono;
 
@@ -25,38 +26,32 @@ void LoadQuery(const std::string &query_file, std::vector<std::string>& query_km
 }
 
 int main(int argc, char **argv){
-    string gn_fn = argv[1];
-    string sa_fn = argv[2];
-    int64_t kmer_size = stoll(argv[3]);
-    string query_fn = argv[4];
-    string indx_fn = argv[5];
-    string runInfo_fn = argv[6];
-    string indx_type = argv[7];
-    string query_type = argv[8];
+    auto opt = parse_command_line_arguments_query(argc, argv);
+    string gn_fn = opt.gn_fn; 
+    string sa_fn = opt.sa_fn;
+    string query_fn = opt.query_file;
+    string indx_fn = opt.indx_fn;
+    string query_type = opt.query_type;
+    string runInfo_fn;
+    bool is_stored_on_file = false;
+    if(opt.run_info_fn != "-1") is_stored_on_file = true;
+
     // int64_t eps = stoi(argv[10]);
     int64_t knot_bs_thres = 64;
-    bool isFirstIndexReturned;
-
-    if (query_type == "search") isFirstIndexReturned = false;
-    else if(query_type == "rank") isFirstIndexReturned = true;
+    bool is_rank_query;
+    if(query_type == "search") is_rank_query = false;
+    else if(query_type == "rank") is_rank_query = true;
     else{
         throw std::logic_error("query type can be either search or rank");
     }
     
-    
-    INDX_TYPE it;
-    if (indx_type == "basic-pla") it = BASIC_PLA;    
-    else if(indx_type == "repeat-pla") it = REPEAT_PLA;
-    else{
-        throw std::logic_error("indx type can be either \"basic-pla\" or \"repeat-pla\"");
-    }
-
     suffix_array<int64_t> sa;
-    sa.Load(gn_fn, sa_fn, kmer_size);
+    sa.Load(gn_fn, sa_fn);
 
-    pla_index pla(knot_bs_thres, sa.get_largest(), sa.size(), indx_fn, it);
+    pla_index pla(knot_bs_thres, is_rank_query);
+    pla.Load(indx_fn, sa);
 
-    std::vector<std::string> query_kmers_vec; 
+    std::vector<std::string> query_kmers_vec;
     std::vector<size_t> query_kmerVals;
 
     LoadQuery(query_fn, query_kmers_vec, query_kmerVals, sa);
