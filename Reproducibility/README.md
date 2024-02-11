@@ -31,19 +31,20 @@ Parameter description:
 |----------|----------|
 | FASTA-FILE | Fasta file on which pla-index will be built |
 | OUTPUT-PREFIX | Prefix of the output file. The file name will be OUTPUT-PREFIX.processed.fasta |
+The output fasta will have a single header line and a single string containing all the bases (without 'N') concatenated.
 
 To construct suffix array on the concatenated genome:
 
 ```
-./mksary PROCESSED-GENOME-FILE SUFFIX-ARRAY-FILE
+./mksary PROCESSED-GENOME-FASTA SUFFIX-ARRAY-FILE
 ```
 Parameter description:
 | Parameter Name | Description |
 |----------|----------|
-| PROCESSED-GENOME-FILE | File name of the concatenated genome without any 'N' character at the bases (one single string) |
+| PROCESSED-GENOME-FASTA | Fasta file name of the concatenated genome without any 'N' character at the bases (one single string). Essentially, this file has only two lines: 1) Header line 2) All bases concatenated single string |
 | SUFFIX-ARRAY-FILE | Name of the binary file where suffix array will be stored |
 
-We use the suffix array format of `mksary` executable output. This is basically a binary file of the suffix array(each index value being a 64 bit integer).
+We use the suffix array format of `mksary` executable output. This is basically a binary file of the suffix array (each index value being a 64 bit integer).
 
 To construct query files:
 ```
@@ -55,7 +56,7 @@ Parameter description:
 Parameter description:
 | Parameter Name | Description |
 |----------|----------|
-| PROCESSED-GENOME-FILE | File name of the concatenated genome without any 'N' character at the bases (one single string) |
+|  PROCESSED-GENOME-FASTA | Fasta file name of the concatenated genome without any 'N' character at the bases (one single string). Essentially, this file has only two lines: 1) Header line 2) All bases concatenated single string |
 | SUFFIX-ARRAY-FILE | Name of the binary file where suffix array is stored |
 | PREFIX | Prefix of the query file name |
 | KMER-SIZE | Kmer size of the query kmers |
@@ -100,7 +101,7 @@ Required Parameters:
 
 | Parameter  | Type    | Description    |
 |-------------|-------------|-------------|
-|--genome_folder | [string] |The name of the folder containing the genome, suffix array and query files|
+|--genome_folder | [string] |The name of the folder containing the genome fasta file, suffix array file and query file|
 |--epsilon |  [int]   |Epsilon value to be used to create pla-index|
 
 Optional parameters with required argument:
