@@ -35,6 +35,7 @@ int main(int argc, char **argv){
     string runInfo_fn;
     bool is_stored_on_file = false;
     if(opt.run_info_fn != "-1") is_stored_on_file = true;
+    
 
     // int64_t eps = stoi(argv[10]);
     int64_t knot_bs_thres = 64;
@@ -70,9 +71,7 @@ int main(int argc, char **argv){
     auto s2 = std::chrono::system_clock::now();
 
     std::chrono::duration<double> elapsed_seconds = s2-s1;
-    std::ofstream runFile(runInfo_fn.c_str(), std::ios_base::app);
-    // runFile<<"Eps: "<<eps<<std::endl;
-    runFile<<"Elapsed_seconds in query: "<<elapsed_seconds.count()<<std::endl;    
+    
     std::cout<<"Elapsed_seconds in query: "<<elapsed_seconds.count()<<std::endl;    
     for(size_t i=0; i<query_kmers_vec.size(); i++){
         if(sa.GetKmerAtStrPos(str_pos_vec[i]) == query_kmers_vec[i]){
@@ -85,7 +84,12 @@ int main(int argc, char **argv){
     std::cout<<"Correct: "<<_correct<<" Total: "<<query_kmers_vec.size()<<std::endl;
     double accuracy = ((double)_correct/query_kmers_vec.size()) * 100;
     printf("Accuracy: %0.2f %%\n",accuracy);
-    runFile<<"Correct: "<<_correct<<" Total: "<<query_kmers_vec.size()<<" Accurancy: "<<accuracy<<"%"<<std::endl;
+    
+    if(is_stored_on_file){
+        std::ofstream runFile(opt.run_info_fn.c_str());
+        runFile<<"Elapsed_seconds in query: "<<elapsed_seconds.count()<<std::endl;
+        runFile<<"Correct: "<<_correct<<" Total: "<<query_kmers_vec.size()<<" Accurancy: "<<accuracy<<"%"<<std::endl;
+    }
 
     
     return 0;

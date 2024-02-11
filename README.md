@@ -44,14 +44,36 @@ mkdir build; cd build; cmake ..; make -j 4
 ## Usage
 
 Now, all the executables are inside the `pla-index/build` folder. 
-
-To build the index:
+```shell
+./build_index -h
 ```
-./build_index GENOME-FASTA-FILE SUFFIX-ARRAY-FILE KMER-SIZE EPS INDEX-NAME L-VALUE INDEX-TYPE ENABLE-FAST-RANK
+would display the command line interface:
+```
+build_pla_index {OPTIONS}
 
+build_pla_index
+
+OPTIONS:
+
+    -h, --help    Print help and exit
+    -g [STRING], --genome_fasta=[STRING]
+                Fasta file with one entry and only ACGT characters [Required]
+    -s [STRING], --suffix_array=[STRING]
+                Suffix array of the genome in a binary file [Required]
+    -k [INT], --kmer_size=[INT]
+                Kmer size to be used to construct the index [21]
+    -e [INT], --eps=[INT]
+                Epsilon value to be used for constructing the pla-index [15]
+    -i [STRING], --index=[STRING]
+                File name where to save the index [genome_fasta.index]
+    -l [INT], --l_val=[INT]
+                To determine the size of the shortcut array, D. |D| = 2^l. [16]
+    -t [STRING], --index_type=[STRING]
+                Whether to build "basic-pla" or "repeat-pla" index [basic-pla]
+    -r            Whether to build bit vector to support fast rank query. [disabled]
 ```
 
-Parameter description:
+<!-- Parameter description:
 
 | Parameter Name | Description |
 |----------|----------|
@@ -62,14 +84,40 @@ Parameter description:
 | INDEX-NAME | File name where to save the index |
 | L-VALUE | To determine the size of the shortcut array, D. &#124;D&#124; = 2<sup>l</sup> |
 | INDEX-TYPE | Whether to build "basic-pla" or "repeat-pla" index |
-| ENABLE-FAST-RANK | Whether to build bit vector to support fast rank query. Provide either "y" or "n" for yes and  no respectively |
+| ENABLE-FAST-RANK | Whether to build bit vector to support fast rank query. Provide either "y" or "n" for yes and  no respectively | -->
 
-For example, to build a `basic-pla` index with 21 size k-mer, epsilon value of 15, having |D| = 2<sup>16</sup> and not creating a bit vector for faster rank query afterwards on the `ecoli` genome inside the `tests/ecoli/` folder:
+For example, to build a `basic-pla` index with `21` size k-mer, default epsilon value (15), default shortcut array size (|D| = 2<sup>16</sup>) and not creating a bit vector for faster rank query afterwards on the `ecoli` genome inside the `tests/ecoli/` folder:
 ```shell
-./build_index ../tests/ecoli/ecoli.fasta ../tests/ecoli/ecoli.sa.bin 21 15 ../tests/ecoli/ecoli.index.bin 16 basic-pla n
+./build_index -g ../tests/ecoli/ecoli.processed.fasta -s ../tests/ecoli/ecoli.sa.bin -i ../tests/ecoli/ecoli.index
 ```
-The built index will be saved on `../tests/ecoli/ecoli.index.bin` file.
+The built index will be saved on `../tests/ecoli/ecoli.index` file.
 
+Similarly, query command line interface can be seen by:
+```shell
+./query_index -h
+```
+and the interface:
+```
+query_pla_index {OPTIONS}
+
+query_pla_index
+
+OPTIONS:
+
+    -h, --help    Print help and exit
+    -g [STRING], --genome_fasta=[STRING]
+                Fasta file with one entry and only ACGT characters [Required]
+    -s [STRING], --suffix_array=[STRING]
+                Suffix array of the genome in a binary file [Required]
+    -i [STRING], --index=[STRING]
+                File name where to save the index [genome_fasta.index] [Required]
+    -q [STRING], --query=[STRING]
+                Name of the file containing all the queries (one kmer per line)
+                [Required]
+    --query_type=[STRING]
+                Whether to do "search" or "rank" query [search]
+```
+<!-- 
 To query the index:
 ```
 ./query_index GENOME-FASTA-FILE SUFFIX-ARRAY-FILE QUERY-FILE INDEX-NAME QUERY-TYPE
@@ -82,11 +130,11 @@ Parameter description:
 | SUFFIX-ARRAY-FILE  |  Suffix array for GENOME in a binary file |
 | QUERY-FILE | Name of the file containing all the queries (one kmer per line) |
 | INDEX-NAME | Index file to use |
-| QUERY-TYPE | Whether to do "search" or "rank" query |
+| QUERY-TYPE | Whether to do "search" or "rank" query | -->
 
-For example, to do `search` query with the provided `tests/ecoli/ecoli.1.query.txt` on the built `tests/ecoli/ecoli.index.bin` one can do the following:
+For example, to do `search` query with the provided `tests/ecoli/ecoli.1.query.txt` on the built `tests/ecoli/ecoli.index` one can do the following:
 ```shell
-./query_index ../tests/ecoli/ecoli.fasta ../tests/ecoli/ecoli.sa.bin 21 ../tests/ecoli/ecoli.1.query.txt ../tests/ecoli/ecoli.index.bin basic-pla search
+./query_index -g ../tests/ecoli/ecoli.processed.fasta -s ../tests/ecoli/ecoli.sa.bin -i ../tests/ecoli/ecoli.index -q ../tests/ecoli/ecoli.1.query.txt
 ```
 The query time information will be showed on the console.
 
