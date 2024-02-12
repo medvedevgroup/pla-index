@@ -1,3 +1,7 @@
+/**
+ * inspired from https://github.com/ksahlin/strobealign/blob/main/src/cmdline.hpp
+*/
+
 #pragma once
 
 #include <vector>

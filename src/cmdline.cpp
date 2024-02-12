@@ -1,3 +1,7 @@
+/**
+ * inspired from https://github.com/ksahlin/strobealign/blob/main/src/cmdline.cpp
+*/
+
 #include "cmdline.hpp"
 #include "args.hxx"
 
