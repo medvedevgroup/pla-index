@@ -37,7 +37,7 @@ int main(int argc, char **argv){
     std::chrono::duration<double> elapsed_seconds = s2-s1;
 
     cout<<"Number of segments: "<<pla.get_num_segments()<<endl;
-    cout<<"Indx file: "<<indx_fn<<endl;
+    cout<<"Index stored in: "<<indx_fn<<endl;
     cout<<"Elapsed seconds in index construction: "<<elapsed_seconds.count()<<" sec"<<endl;
 
     pla.Save(indx_fn, sa);

@@ -30,7 +30,7 @@ rule build:
     output:
         index_fn = "{fn}/{fn}.index"
     shell:
-        "g++ -std=c++17 {params.flags} -I {params.sdsl_include_path} -L {params.sdsl_lib_path} {params.codePath}/build_index.cpp "
+        "g++ -std=c++17 {params.flags} -I {params.sdsl_include_path} -L {params.sdsl_lib_path} {params.codePath}/build_pla_index.cpp "
         "{params.codePath}/BitPacking.cpp {params.codePath}/pla_index.cpp "
         "{params.codePath}/cmdline.cpp "
         "-o {params.execPath}/build_pla_index "
@@ -57,7 +57,7 @@ rule query:
     output:
         runInfo = "{fn}/{fn}.query_time.txt"
     shell:
-        "g++ -std=c++17 {params.flags} -I {params.sdsl_include_path} -L {params.sdsl_lib_path} {params.codePath}/query_index.cpp "
+        "g++ -std=c++17 {params.flags} -I {params.sdsl_include_path} -L {params.sdsl_lib_path} {params.codePath}/query_pla_index.cpp "
         "{params.codePath}/BitPacking.cpp {params.codePath}/pla_index.cpp "
         "{params.codePath}/cmdline.cpp "
         "-o {params.execPath}/query_pla_index "

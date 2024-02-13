@@ -151,7 +151,8 @@ Parameter description:
 # Small Example
 We will use the formatted fasta file: `tests/ecoli/ecoli.processed.fasta` for the example. To build suffix array:
 ```shell
-./mksary tests/ecoli/ecoli.processed.fasta tests/ecoli/ecoli.sa.bin
+cd build/
+./mksary ../tests/ecoli/ecoli.processed.fasta ../tests/ecoli/ecoli.sa.bin
 ```
 The built suffix array is written on `tests/ecoli/ecoli.sa.bin`.
 
