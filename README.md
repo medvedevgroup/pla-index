@@ -85,7 +85,7 @@ and the interface:
 ```
 query_pla_index {OPTIONS}
 
-query_pla_index
+    query_pla_index
 
 OPTIONS:
 
@@ -95,12 +95,16 @@ OPTIONS:
     -s [STRING], --suffix_array=[STRING]
                 Suffix array of the genome in a binary file [Required]
     -i [STRING], --index=[STRING]
-                File name where to save the index [genome_fasta.index] [Required]
+                Name of the stored index file [Required]
     -q [STRING], --query=[STRING]
-                Name of the file containing all the queries (one kmer per line)
-                [Required]
+                Name of a text file containing queries. Each line of the file should
+                contain a single k-mer. The length of the kmer should be the same as
+                the one provided while building the index. [Required]
     --query_type=[STRING]
-                Whether to do "search" or "rank" query [search]
+                Whether to do "search" or "rank" query. "rank" gives you the value of
+                the first position in the suffix array where the query is found.
+                "search" on the other hand, also returns the value where the query
+                appears, but it might not be the very first spot. [default: search]
 ```
 <!-- 
 To query the index:
