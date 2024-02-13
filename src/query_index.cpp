@@ -2,6 +2,7 @@
 #include <fstream>
 #include "pla_index.hpp"
 #include "suffix_array.h"
+#include "cmdline.hpp"
 
 using namespace std::chrono;
 
@@ -25,40 +26,24 @@ void LoadQuery(const std::string &query_file, std::vector<std::string>& query_km
 }
 
 int main(int argc, char **argv){
-    string gn_fn = argv[1];
-    string sa_fn = argv[2];
-    int64_t kmer_size = stoll(argv[3]);
-    string query_fn = argv[4];
-    string indx_fn = argv[5];
-    string runInfo_fn = argv[6];
-    // string indx_type = "exact-pla";
-    int64_t knot_bs_thres = 64;
-    bool isFirstIndexReturned = false;
-
-    // if (query_type == "search") isFirstIndexReturned = false;
-    // else if(query_type == "rank") isFirstIndexReturned = true;
-    // else{
-    //     throw std::logic_error("query type can be either search or rank");
-    // }
+    auto opt = parse_command_line_arguments_query(argc, argv);
+    string gn_fn = opt.gn_fn; 
+    string sa_fn = opt.sa_fn;
+    string query_fn = opt.query_file;
+    string indx_fn = opt.indx_fn;
     
+    bool is_stored_on_file = false;
+    if(opt.run_info_fn != "-1") is_stored_on_file = true;
+    
+    int64_t knot_bs_thres = 64;
     
     INDX_TYPE it = EXACT_PLA;
-    
-    // if(indx_type != "exact-pla"){
-    //     throw std::logic_error("indx type can only be exact-pla in this version");
-    // }
-    // it = EXACT_PLA;
-
-    // if (indx_type == "basic-pla") it = BASIC_PLA;    
-    // else if(indx_type == "repeat-pla") it = REPEAT_PLA;
-    // else{
-    //     throw std::logic_error("indx type can be either \"basic-pla\" or \"repeat-pla\"");
-    // }
 
     suffix_array<int64_t> sa;
-    sa.Load(gn_fn, sa_fn, kmer_size);
+    sa.Load(gn_fn, sa_fn);
 
-    pla_index pla(knot_bs_thres, sa.get_largest(), sa.size(), indx_fn, it);
+    pla_index pla(knot_bs_thres);
+    pla.Load(indx_fn, sa);
 
     std::vector<std::string> query_kmers_vec; 
     std::vector<size_t> query_kmerVals;
@@ -67,8 +52,7 @@ int main(int argc, char **argv){
 
     int64_t nQueries = query_kmers_vec.size();
     std::cout<<"Number of queries: "<<nQueries<<std::endl;
-    std::cout<<"Starting benchmarking...\n";
-    // long long sa_idx;
+    std::cout<<"Starting querying...\n";
     int _correct = 0;
     
     std::vector<size_t> str_pos_vec(query_kmers_vec.size());
@@ -79,22 +63,25 @@ int main(int argc, char **argv){
     auto s2 = std::chrono::system_clock::now();
 
     std::chrono::duration<double> elapsed_seconds = s2-s1;
-    std::ofstream runFile(runInfo_fn.c_str(), std::ios_base::app);
-    // runFile<<"Eps: "<<eps<<std::endl;
-    runFile<<"Elapsed_seconds in query: "<<elapsed_seconds.count()<<std::endl;    
+    
     std::cout<<"Elapsed_seconds in query: "<<elapsed_seconds.count()<<std::endl;    
     for(size_t i=0; i<query_kmers_vec.size(); i++){
         if(sa.GetKmerAtStrPos(str_pos_vec[i]) == query_kmers_vec[i]){
             _correct++;
         }
         else{
-            std::cout<<query_kmers_vec[i]<<std::endl;
+            // std::cout<<query_kmers_vec[i]<<std::endl;
         }
     }
     std::cout<<"Correct: "<<_correct<<" Total: "<<query_kmers_vec.size()<<std::endl;
     double accuracy = ((double)_correct/query_kmers_vec.size()) * 100;
     printf("Accuracy: %0.2f %%\n",accuracy);
-    runFile<<"Correct: "<<_correct<<" Total: "<<query_kmers_vec.size()<<" Accurancy: "<<accuracy<<"%"<<std::endl;
+    
+    if(is_stored_on_file){
+        std::ofstream runFile(opt.run_info_fn.c_str());
+        runFile<<"Elapsed_seconds in query: "<<elapsed_seconds.count()<<std::endl;
+        runFile<<"Correct: "<<_correct<<" Total: "<<query_kmers_vec.size()<<" Accurancy: "<<accuracy<<"%"<<std::endl;
+    }
 
     return 0;
 }

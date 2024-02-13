@@ -27,13 +27,14 @@ void strip(std::string &str)
     }
 }
 
-void FilterNFromFile(string inFileName, string outFileName)
+void process_fasta(string inFileName, string fn_pref)
 {   
+    string outFileName = fn_pref+".processed.fasta";
     ofstream outFile(outFileName.c_str());
     ifstream inFile(inFileName.c_str());
     string line;
     string filteredLine = "";
-
+    outFile<<">"<<fn_pref<<endl;
     while (getline (inFile, line)){
         strip(line);
         filteredLine = "";
@@ -51,18 +52,17 @@ void FilterNFromFile(string inFileName, string outFileName)
         }
         outFile<<filteredLine;
     }
-
     outFile.close();
     inFile.close();
 }   
-
+/// @brief Creates a N filtered fasta file with a single header line
+/// @param inFile Fasta file
+/// @param fn_pref File name prefix, also used in the header 
 int main(int argc, char *argv[]){
     string inFile = argv[1]; //fasta file
     string fn_pref =argv[2]; // same as folder name for snakemake
-    strip(inFile);
-    string outFile = fn_pref+".ConcatenatedGenome.txt";
-
-    FilterNFromFile(inFile, outFile);
+    
+    process_fasta(inFile, fn_pref);
 
     return 0;
 }

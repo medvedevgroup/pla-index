@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <string>
+#include "utils/util.hpp"
 
 template <typename T>
 class suffix_array {
@@ -83,7 +84,7 @@ public:
     };
 
     // Overloading the [] operator
-    T operator[](std::size_t index) {
+    T operator[](std::size_t index) const{
         if (index < 0 ||  index >= sa.size()) {
             throw std::out_of_range("Index out of range");
         }
@@ -107,11 +108,11 @@ public:
         return sa.size();
     }
 
-    const int64_t GetKmerValAtSAIndx(const int64_t i){
+    const int64_t GetKmerValAtSAIndx(const int64_t i) const{
         return GetKmerVal(GetKmerAtIndex(i));
     }
 
-    const int64_t get_largest(){
+    const int64_t get_largest() const{
         uint64_t last_idx = fSize-1;
         while(GetKmerValAtSAIndx(last_idx) == -1) last_idx--;
         return GetKmerValAtSAIndx(last_idx);
@@ -121,7 +122,7 @@ public:
         return sa[idx];
     }
 
-    inline const int64_t GetKmerVal(const string &s){
+    inline const int64_t GetKmerVal(const string &s) const{
         // if we have a smaller suffix than k-mer size,
         // we want to ignore it so that it never becomes a breakpoint
         if(s.compare("-1") == 0) return -1; 
@@ -146,7 +147,7 @@ public:
         return val;
     }
 
-    const std::string GetKmerAtIndex(const int64_t i){
+    const std::string GetKmerAtIndex(const int64_t i) const{
         int64_t suff_i_start = sa[i];
         if(str.begin()+suff_i_start+kmer_size <= str.end()){
             std::string suffix_i(str.begin()+suff_i_start, str.begin()+suff_i_start+kmer_size);
@@ -233,12 +234,21 @@ public:
     }   
 
     void LoadGenomeString(std::string genomeFile){
-        str.resize(fSize);
-        FILE *fp = fopen(genomeFile.c_str(), "rb");
-        //Last character is not handled -> should be $ or \0?
-        int err = fread(&str[0], 1, fSize, fp);
-        // str[fSize-1] = '\0';
-        fclose(fp);
+        str.reserve(fSize);
+        string line;
+        ifstream in_file(genomeFile.c_str());
+        // skipping header
+        getline(in_file, line);
+        while(getline(in_file, line)){
+            line = arank::util::trim_string(line);
+            std::copy(line.begin(), line.end(), std::back_inserter(str));
+        }
+        fSize = str.size();
+        printf("#Bases: %ld\n",fSize);
+        // str.resize(fSize);
+        // FILE *fp = fopen(genomeFile.c_str(), "rb");        
+        // int err = fread(&str[0], 1, fSize, fp);
+        // fclose(fp);
     }
 
     void LoadSA(std::string sa_file){
@@ -248,13 +258,19 @@ public:
         fclose(fp);
     }
 
-    void Load(std::string genomeF, std::string saF, int64_t km_size){
+    inline bool is_kmer_size_needed(){return true;}
+
+    void set_kmer_size(int64_t km_size){
+        kmer_size = km_size;
+    }
+
+    inline int64_t get_kmer_size(){return kmer_size;}
+
+    void Load(std::string genomeF, std::string saF){
         std::ifstream in(genomeF.c_str(), std::ifstream::ate | std::ifstream::binary);
         fSize = in.tellg();
-        printf("#Bases: %ld\n",fSize);
         this->LoadGenomeString(genomeF);        
         this->LoadSA(saF);
-        kmer_size = km_size;
-        printf("SA loaded\n");
+        // printf("SA loaded\n");
     }
 };

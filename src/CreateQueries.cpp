@@ -2,7 +2,13 @@
 * Suffix array random queries
 */
 
-#include <bits/stdc++.h>
+#include <vector>
+#include <string>
+#include <iostream>
+#include <fstream>
+#include <random>
+#include <algorithm>
+#include "utils/util.hpp"
 using namespace std;
 
 vector<char> str;
@@ -72,11 +78,16 @@ void LoadSA(string sa_file){
 }
 
 void LoadGenomeString(string genomeFile){
-    str.resize(fSize);
-    FILE *fp = fopen(genomeFile.c_str(), "rb");
-    //Last character is not handled -> should be $ or \0?
-    size_t err = fread(&str[0], 1, fSize, fp);
-    fclose(fp);
+    str.reserve(fSize);
+    string line;
+    ifstream in_file(genomeFile.c_str());
+    // skipping header
+    getline(in_file, line);
+    while(getline(in_file, line)){
+        line = arank::util::trim_string(line);
+        std::copy(line.begin(), line.end(), std::back_inserter(str));
+    }
+    fSize = str.size();
 }
 
 std::ifstream::pos_type filesize(const char* filename)
