@@ -12,7 +12,6 @@ pla-index builds a lightweight index from a FASTA file and its corresponding suf
 ## Installation
 ```shell
 git clone --recursive https://github.com/medvedevgroup/pla-index.git
-git checkout pla-index-exact
 cd pla-index
 ./update_cmake_lists.sh SDSL_INCLUDE_PATH SDSL_LIB_PATH
 mkdir build
@@ -26,6 +25,7 @@ The two parameters for `update_cmake_lists.sh` are
 | SDSL_INCLUDE_PATH  | Path to the SDSL include folder [typically ~/include/]   |
 | SDSL_LIB_PATH  | Path to the SDSL library folder [typically ~/lib/]  |
 
+To use `PLA-index-exact`, check out to the `pla-index-exact` branch, and follow the `README` instructions there.
 
 ## Usage
 
