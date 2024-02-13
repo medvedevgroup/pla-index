@@ -53,12 +53,12 @@ public:
     void encode_knots(const vector<int64_t> &brk_kval_vec);    
     
     void SetBit(uint64_t &number, uint64_t pos);
-    void Save(string index_fn);
+    
     void save_unpacked(string index_fn);
     void save_bit_info(string index_fn, CBitPacking &ind_diff_pack);
     uint64_t get_total_size_in_bytes();
     const vector<uint64_t> get_processed_ind_vec() const;
-    void Load(string index_fn, int64_t total_bits);
+    
     int64_t binary_search(int64_t lo, int64_t hi, const int64_t kval) const;
     inline uint64_t get_num_knots() const {return index_size;}
     
@@ -308,7 +308,7 @@ public:
     // suffix array version
     template <typename DataType>
     void Save(string indx_fn, DataType& data){
-        essentials::save(f, index_fn.c_str());
+        essentials::save(f, indx_fn.c_str());
         std::ofstream os(indx_fn, std::ios_base::app);
         /**
          * Set flags x 

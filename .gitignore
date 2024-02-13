@@ -5,3 +5,4 @@ tests/.snakemake
 tests/*.txt
 tests/config.yaml
 build/
+.vscode/
