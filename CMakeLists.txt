@@ -17,12 +17,12 @@ target_link_directories(pla PUBLIC /research/mqa6002/Softwares/Installed/lib/)
 target_link_libraries(pla PUBLIC sdsl divsufsort divsufsort64)
 
 add_executable(build_pla_index 
-    src/build_index.cpp    
+    src/build_pla_index.cpp    
 )
 target_link_libraries(build_pla_index PUBLIC pla)
 
 add_executable(query_pla_index
-    src/query_index.cpp
+    src/query_pla_index.cpp
 )
 target_link_libraries(query_pla_index PUBLIC pla)
 

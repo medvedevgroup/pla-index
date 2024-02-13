@@ -2,4 +2,6 @@ Dataset/
 executables/
 libdivsufsort/build/
 tests/.snakemake
+tests/config.yaml
 build/
+.vscode/

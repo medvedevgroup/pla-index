@@ -4,7 +4,7 @@ pla-index builds a lightweight index from a FASTA file and its corresponding suf
 # Requirements
 - Linux (64 bit)
 - C++17
-- [SDSL](https://github.com/simongog/sdsl-lite/tree/master)
+- [SDSL](https://github.com/simongog/sdsl-lite/tree/master) (>=2.1.1)
 - cmake (>= 3.16)
 
 # Quick Start
@@ -25,7 +25,7 @@ The two parameters for `update_cmake_lists.sh` are
 | SDSL_INCLUDE_PATH  | Path to the SDSL include folder [typically ~/include/]   |
 | SDSL_LIB_PATH  | Path to the SDSL library folder [typically ~/lib/]  |
 
-To use `PLA-index-exact`, check out to the `pla-index-exact` branch, and follow the `README` instructions there.
+To use `PLA-index-exact` version, check out to the `pla-index-exact` branch, and follow the `README` instructions there.
 
 ## Usage
 
@@ -37,26 +37,30 @@ would display the command line interface:
 ```
 build_pla_index {OPTIONS}
 
-build_pla_index
+    build_pla_index
 
 OPTIONS:
 
     -h, --help    Print help and exit
     -g [STRING], --genome_fasta=[STRING]
-                Fasta file with one entry and only ACGT characters [Required]
+                Fasta file with one entry and only ACGT characters. [Required]
     -s [STRING], --suffix_array=[STRING]
-                Suffix array of the genome in a binary file [Required]
-    -k [INT], --kmer_size=[INT]
-                Kmer size to be used to construct the index [21]
-    -e [INT], --eps=[INT]
-                Epsilon value to be used for constructing the pla-index [15]
-    -i [STRING], --index=[STRING]
-                File name where to save the index [genome_fasta.index]
-    -l [INT], --l_val=[INT]
-                To determine the size of the shortcut array, D. |D| = 2^l. [16]
+                Suffix array of the genome in a binary file. [Required]
     -t [STRING], --index_type=[STRING]
-                Whether to build "basic-pla" or "repeat-pla" index [basic-pla]
-    -r            Whether to build bit vector to support fast rank query. [disabled]
+                Whether to build "basic-pla" or "repeat-pla" index. "repeat-pla" is
+                generally the better option but can slow down rank queries unless the
+                -r option is also used. [default: basic-pla]
+    -k [INT], --kmer_size=[INT]
+                Kmer size to be used to construct the index. [default: 21]
+    -e [INT], --eps=[INT]
+                Epsilon value to be used for constructing the pla-index. [default: 15]
+    -o [STRING], --index=[STRING]
+                File name where to save the index. [default: genome_fasta.index]
+    -l [INT], --l_val=[INT]
+                To determine the size of the shortcut array, D. |D| = 2^l. [default:
+                16]
+    -r            Construct an extra bitvector with the same length as the suffix array.
+                Use this to speed up rank queries. [default: disabled]
 ```
 
 <!-- Parameter description:
@@ -72,11 +76,6 @@ OPTIONS:
 | INDEX-TYPE | Whether to build "basic-pla" or "repeat-pla" index |
 | ENABLE-FAST-RANK | Whether to build bit vector to support fast rank query. Provide either "y" or "n" for yes and  no respectively | -->
 
-For example, to build a `basic-pla` index with `21` size k-mer, default epsilon value (15), default shortcut array size (|D| = 2<sup>16</sup>) and not creating a bit vector for faster rank query afterwards on the `ecoli` genome inside the `tests/ecoli/` folder:
-```shell
-./build_index -g ../tests/ecoli/ecoli.processed.fasta -s ../tests/ecoli/ecoli.sa.bin -i ../tests/ecoli/ecoli.index
-```
-The built index will be saved on `../tests/ecoli/ecoli.index` file.
 
 Similarly, query command line interface can be seen by:
 ```shell
@@ -118,22 +117,11 @@ Parameter description:
 | INDEX-NAME | Index file to use |
 | QUERY-TYPE | Whether to do "search" or "rank" query | -->
 
-For example, to do `search` query with the provided `tests/ecoli/ecoli.1.query.txt` on the built `tests/ecoli/ecoli.index` one can do the following:
-```shell
-./query_index -g ../tests/ecoli/ecoli.processed.fasta -s ../tests/ecoli/ecoli.sa.bin -i ../tests/ecoli/ecoli.index -q ../tests/ecoli/ecoli.1.query.txt
-```
-The query time information will be showed on the console.
-
-We follow the following formats at the input for both building and querying pla-index:
-- The genome file is a fasta file with only one header line. There is no 'N' character at the nucleotide bases in the fasta file.
-- The suffix array file is a binary file of consecutive 64 bit integers (values of the suffix array indices)
-- Index type can be either "basic-pla" or "repeat-pla"
-- Query file contains same length kmers (one per line). The kmer-size of the query kmers is the same as the provided one while building the index
-
+# Suffix Array
 To construct suffix array, we use [libdivsufsort](https://github.com/hasin-abrar/libdivsufsort) tool. 
 We modify it slightly to allow 64 bit integers. 
 
-To construct the suffix array builder executable `mksary`:
+To create the suffix array builder executable `mksary`:
 ```
 cd ../libdivsufsort
 mkdir build
@@ -145,8 +133,49 @@ make
 cp examples/mksary ../../build/
 ```
 
+To build the suffix array:
+```shell
+./mksary INFILE OUTFILE
+```
+Parameter description:
+
+| Parameter Name | Description |
+|----------|----------|
+| INFILE | Fasta file with one entry and only ACGT characters|
+| OUTFILE  | Name of the file where the suffix array for INFILE will be stored |
+
+# Small Example
+We will use the formatted fasta file: `tests/ecoli/ecoli.processed.fasta` for the example. To build suffix array:
+```shell
+./mksary tests/ecoli/ecoli.processed.fasta tests/ecoli/ecoli.sa.bin
+```
+The built suffix array is written on `tests/ecoli/ecoli.sa.bin`.
+
+To build a `basic-pla` index with `21` size k-mer, default epsilon value (15), default shortcut array size (|D| = 2<sup>16</sup>) and not creating a bit vector for faster rank query afterwards, we will use the formatted fasta file and the built suffix array:
+```shell
+./build_index -g ../tests/ecoli/ecoli.processed.fasta -s ../tests/ecoli/ecoli.sa.bin -o ../tests/ecoli/ecoli.index
+```
+The built index will be saved on `../tests/ecoli/ecoli.index` file.
+
+To do a `search` query with the provided `tests/ecoli/ecoli.1.query.txt` on the built `tests/ecoli/ecoli.index` one can do the following:
+```shell
+./query_index -g ../tests/ecoli/ecoli.processed.fasta -s ../tests/ecoli/ecoli.sa.bin -i ../tests/ecoli/ecoli.index -q ../tests/ecoli/ecoli.1.query.txt
+```
+The query time will be shown on console.
+
 # Reproducibility
 
 To reproduce the results shown in our paper, one can follow the `README` file inside the `Reproducibility` folder.
 
+# Citation
 
+If you use `pla-index`, please cite:
+```
+@article {Abrar2024.02.08.579510,
+	author = {Md Hasin Abrar and Paul Medvedev},
+	title = {PLA-complexity of k-mer multisets},
+	elocation-id = {2024.02.08.579510},
+	year = {2024},
+	doi = {10.1101/2024.02.08.579510}
+}
+```
