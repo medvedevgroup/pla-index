@@ -31,7 +31,7 @@ To use `PLA-index-exact` version, check out to the `pla-index-exact` branch, and
 
 Now, all the executables are inside the `pla-index/build` folder. 
 ```shell
-./build_index -h
+./build_pla_index -h
 ```
 would display the command line interface:
 ```
@@ -79,7 +79,7 @@ OPTIONS:
 
 Similarly, query command line interface can be seen by:
 ```shell
-./query_index -h
+./query_pla_index -h
 ```
 and the interface:
 ```
@@ -153,13 +153,13 @@ The built suffix array is written on `tests/ecoli/ecoli.sa.bin`.
 
 To build a `basic-pla` index with `21` size k-mer, default epsilon value (15), default shortcut array size (|D| = 2<sup>16</sup>) and not creating a bit vector for faster rank query afterwards, we will use the formatted fasta file and the built suffix array:
 ```shell
-./build_index -g ../tests/ecoli/ecoli.processed.fasta -s ../tests/ecoli/ecoli.sa.bin -o ../tests/ecoli/ecoli.index
+./build_pla_index -g ../tests/ecoli/ecoli.processed.fasta -s ../tests/ecoli/ecoli.sa.bin -o ../tests/ecoli/ecoli.index
 ```
 The built index will be saved on `../tests/ecoli/ecoli.index` file.
 
 To do a `search` query with the provided `tests/ecoli/ecoli.1.query.txt` on the built `tests/ecoli/ecoli.index` one can do the following:
 ```shell
-./query_index -g ../tests/ecoli/ecoli.processed.fasta -s ../tests/ecoli/ecoli.sa.bin -i ../tests/ecoli/ecoli.index -q ../tests/ecoli/ecoli.1.query.txt
+./query_pla_index -g ../tests/ecoli/ecoli.processed.fasta -s ../tests/ecoli/ecoli.sa.bin -i ../tests/ecoli/ecoli.index -q ../tests/ecoli/ecoli.1.query.txt
 ```
 The query time will be shown on console.
 
