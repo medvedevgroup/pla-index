@@ -29,7 +29,6 @@ The two parameters for `update_cmake_lists.sh` are
 | SDSL_INCLUDE_PATH  | Path to the SDSL include folder [typically ~/include/]   |
 | SDSL_LIB_PATH  | Path to the SDSL library folder [typically ~/lib/]  |
 
-To use the basic-pla or repeat-pla, check out to the `main` branch, and follow the `README` instructions there.
 
 ## Usage
 
