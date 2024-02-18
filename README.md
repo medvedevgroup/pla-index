@@ -174,7 +174,7 @@ To reproduce the results shown in our paper, one can follow the `README` file in
 
 If you use `pla-index`, please cite:
 ```
-@article {Abrar2024.02.08.579510,
+@article{Abrar2024.02.08.579510,
 	author = {Md Hasin Abrar and Paul Medvedev},
 	title = {PLA-complexity of k-mer multisets},
 	elocation-id = {2024.02.08.579510},
