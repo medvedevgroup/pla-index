@@ -4,6 +4,12 @@ To use the read aligner application, run the following command:
 git checkout strobealign-application
 ```
 
+# Exact Version
+To use `PLA-index-exact` version, check out to the `pla-index-exact` branch, and follow the `README` instructions there.
+```shell
+git checkout pla-index-exact
+```
+
 # Reproducibility Information
 `Refseq_dataset.csv` file contains the RefSeq IDs, Kingdom, alpha and beta values of `Table 5` from our paper. 
 `RefseqID_7Genomes.pdf` contains the RefSeq IDs of the genomes from `Table 6`.

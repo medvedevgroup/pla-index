@@ -25,8 +25,6 @@ The two parameters for `update_cmake_lists.sh` are
 | SDSL_INCLUDE_PATH  | Path to the SDSL include folder [typically ~/include/]   |
 | SDSL_LIB_PATH  | Path to the SDSL library folder [typically ~/lib/]  |
 
-To use `PLA-index-exact` version, check out to the `pla-index-exact` branch, and follow the `README` instructions there.
-
 ## Usage
 
 Now, all the executables are inside the `pla-index/build` folder. 
