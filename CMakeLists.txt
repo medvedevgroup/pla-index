@@ -9,7 +9,7 @@ set(CMAKE_CXX_FLAGS  "-Ofast -mbmi2 -msse4.2 -DNDEBUG -march=native")
 
 add_library(pla STATIC 
   src/BitPacking.cpp
-  src/pla_index.cpp
+#   src/pla_index.cpp
   src/cmdline.cpp
 )
 target_include_directories(pla PUBLIC  /research/mqa6002/Softwares/Installed/include/ ) 

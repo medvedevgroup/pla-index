@@ -2,45 +2,34 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <vector>
+#include <algorithm>
 #include "pla_index.hpp"
-#include "suffix_array.h"
-#include "cmdline.hpp"
 
 int main(int argc, char **argv){
-    auto opt = parse_command_line_arguments_build(argc, argv);
-    
-    string gn_fn = opt.gn_fn; 
-    string sa_fn = opt.sa_fn;
-    int64_t kmer_size = opt.kmer_size;
-    int64_t eps = opt.eps;
-    string indx_fn = opt.indx_fn;
-    int64_t lp_bits = opt.lp_bits;
-    string indx_type = opt.indx_type;
-    bool is_fast_rank = opt.is_fast_rank;
+    std::vector<int64_t> data(1000000);
+    std::srand(12345);
+    std::generate(data.begin(), data.end(), std::rand);
+    data.push_back(42);
+    std::sort(data.begin(), data.end());
 
-    INDX_TYPE it;
-    if (indx_type == "basic-pla") it = BASIC_PLA;    
-    else if(indx_type == "repeat-pla") it = REPEAT_PLA;
-    else{
-        throw std::logic_error("indx type can be either basic-pla or repeat-pla");
-    }
-
-    suffix_array<int64_t> sa;
-    sa.Load(gn_fn, sa_fn);
-    sa.set_kmer_size(kmer_size);
-
-    pla_index pla(eps, lp_bits, sa.get_largest(), is_fast_rank, sa.size(), it);
+    int64_t epsilon = 128;
+    pla_index pla(epsilon, data);
 
     auto s1 = std::chrono::system_clock::now();
-    pla.build_index(sa.begin());
+    pla.build_index(data.begin());
     auto s2 = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = s2-s1;
 
     cout<<"Number of segments: "<<pla.get_num_segments()<<endl;
-    cout<<"Indx file: "<<indx_fn<<endl;
     cout<<"Elapsed seconds in index construction: "<<elapsed_seconds.count()<<" sec"<<endl;
 
-    pla.Save(indx_fn, sa);
+    string indx_fn = "pla_index.indx";
+    pla.Save(indx_fn, data);
+
+    int64_t q = 42;
+    std::cout<<pla.query(q, data)<<endl;
+
 
     return 0;
 }
