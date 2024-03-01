@@ -3,3 +3,4 @@ executables/
 libdivsufsort/build/
 tests/.snakemake
 build/
+.vscode/
