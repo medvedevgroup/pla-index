@@ -30,7 +30,7 @@ rule build:
     output:
         index_fn = "{fn}/{fn}.index"
     shell:
-        "g++ -std=c++17 {params.flags} -I {params.sdsl_include_path} -L {params.sdsl_lib_path} {params.codePath}/build_index.cpp "
+        "g++ -std=c++17 {params.flags} -I {params.sdsl_include_path} -L {params.sdsl_lib_path} {params.codePath}/build_pla_index.cpp "
         "{params.codePath}/BitPacking.cpp {params.codePath}/pla_index.cpp "
         "{params.codePath}/cmdline.cpp "
         "-o {params.execPath}/build_pla_index "
@@ -38,7 +38,7 @@ rule build:
         # "/usr/bin/time -f \"%M,%e,%U,%S\" --output-file=memkb_sec_Usec_Ksec_dict_build.txt "
         "{params.execPath}/build_pla_index -g {input.genomeF} -s {input.saF} "
         "-k {params.kmer_size} -e {params.epsilon} "
-        "-i {output.index_fn} -l {params.lp_bits} "
+        "-o {output.index_fn} -l {params.lp_bits} "
         "-t {params.indx_type} {params.is_fast_rank_enabled} "
 
 rule query:
@@ -57,7 +57,7 @@ rule query:
     output:
         runInfo = "{fn}/{fn}.query_time.txt"
     shell:
-        "g++ -std=c++17 {params.flags} -I {params.sdsl_include_path} -L {params.sdsl_lib_path} {params.codePath}/query_index.cpp "
+        "g++ -std=c++17 {params.flags} -I {params.sdsl_include_path} -L {params.sdsl_lib_path} {params.codePath}/query_pla_index.cpp "
         "{params.codePath}/BitPacking.cpp {params.codePath}/pla_index.cpp "
         "{params.codePath}/cmdline.cpp "
         "-o {params.execPath}/query_pla_index "

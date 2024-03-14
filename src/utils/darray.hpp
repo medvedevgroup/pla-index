@@ -1,3 +1,7 @@
+/**
+ * Source: https://github.com/jermp/pthash/
+*/
+
 #pragma once
 
 #include "util.hpp"

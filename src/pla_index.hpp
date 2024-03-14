@@ -163,6 +163,7 @@ public:
             essentials_arank::load_pod(is, t_kmer_size);
             data.set_kmer_size(t_kmer_size);
         }
+        total_data_points = data.size();
         uint64_t largest = data.get_largest();
         uint64_t total_bits;
         if(ceil(log2(largest)) == floor(log2(largest))) total_bits = ceil(log2(largest)) + 1;
@@ -244,7 +245,7 @@ public:
                 }while(ind_point_val == ind_brk_beg_idx);
                 brkpnt = binary_search(ind_point_val, ind_brk_beg_idx, query_val);
             }
-            // cout<<query_val<<" "<<brkpnt<<" "<<direction<<endl;
+            // cout<<query_val<<" "<<brkpnt<<endl;
             const int64_t brk_beg_kval = brk_uniform_diff_packed.GetValueAt(brkpnt)+max_data_ratio*brkpnt;
             if(brk_beg_kval == query_val) {
                 query_pred = y_range_beg.access(brkpnt) - epsilon;
@@ -269,7 +270,7 @@ public:
                     break;
                     }
                 }
-                // cout<<"Interval: \n"<<brk_beg_kval<<"\n"<<query_val<<"\n"<<brk_end_kval<<endl;
+                // cout<<"Interval: \n";
                 // cout<<query_val<<endl;
                 // cout<<brk_beg_kval<<" "
                 //     <<brk_end_kval<<" "
@@ -289,7 +290,7 @@ public:
         // if(query_pred < int64_t(0)) query_pred = int64_t(0);        
         // if(query_pred > int64_t(total_data_points)-1) query_pred = int64_t(total_data_points)-1;
         query_pred = std::clamp(query_pred, int64_t(0), int64_t(total_data_points) - 1);
-        
+        // cout<<query_pred<<endl;
         if (!is_rank_query){
             return data.BinarySearch(query , max(query_pred - epsilon, int64_t(0)), 
                 min(query_pred + epsilon, int64_t(total_data_points)-1), is_rank_query);

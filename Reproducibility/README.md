@@ -4,6 +4,12 @@ To use the read aligner application, run the following command:
 git checkout strobealign-application
 ```
 
+# Exact Version
+To use `PLA-index-exact` version, check out to the `pla-index-exact` branch, and follow the `README` instructions there.
+```shell
+git checkout pla-index-exact
+```
+
 # Reproducibility Information
 `Refseq_dataset.csv` file contains the RefSeq IDs, Kingdom, alpha and beta values of `Table 5` from our paper. 
 `RefseqID_7Genomes.pdf` contains the RefSeq IDs of the genomes from `Table 6`.
@@ -30,7 +36,8 @@ Parameter description:
 | Parameter Name | Description |
 |----------|----------|
 | FASTA-FILE | Fasta file on which pla-index will be built |
-| OUTPUT-PREFIX | Prefix of the output file. The file name will be OUTPUT-PREFIX.processed.fasta |
+| OUTPUT-PREFIX | Prefix of the output file. The file name will be `OUTPUT-PREFIX.processed.fasta` |
+
 The output fasta will have a single header line and a single string containing all the bases (without 'N') concatenated.
 
 To construct suffix array on the concatenated genome:
@@ -90,36 +97,55 @@ The snakemake file assumes the following naming conventions:
 - Binary suffix array file (64 bit integers as suffix array values) inside the genome folder as GENOME/GENOME.sa.bin
 - Query files (one kmer at each line) with their tag number as GENOME/GENOME.QUERY_TAG.query.txt
 
-Thus, if one have a fasta file at hand, output from `process_fasta`, `mksary` and `create_queries` can be used to format the files necessary for `snakemake`.
+Thus, if one have a fasta file at hand, output from `process_fasta`, `mksary` and `create_queries` (all are inside the `build` folder) can be used to format the files necessary for `snakemake`.
 
 For example, let the genome folder name be `ecoli`. 
 Then, we will have three files inside `ecoli` folder: `ecoli/ecoli.processed.fasta`, `ecoli/ecoli.sa.bin`, and `ecoli/ecoli.1.query.txt` (`1` being the tag number of the query)
 
-Then, create a config file using CreateConfigFile.py
+Then, create a config file using CreateConfigFile.py. To see the config options:
+```shell
+python3 CreateConfigFile.py -h
+```
+Config options:
+```
+usage: CreateConfigFile.py [-h] --genome_folder GENOME_FOLDER --epsilon EPSILON [--index_type INDEX_TYPE]
+                           [--fast_rank FAST_RANK] [--query_type QUERY_TYPE] [--kmer_size KMER_SIZE]
+                           [--code_path CODE_PATH] [--exec_path EXEC_PATH] [--l_bits L_BITS] [--query_tag QUERY_TAG]
+                           [--sdsl_lib_path SDSL_LIB_PATH] [--sdsl_inc_path SDSL_INC_PATH]
 
-Required Parameters:
+PLA-Index config file builder
 
-| Parameter  | Type    | Description    |
-|-------------|-------------|-------------|
-|--genome_folder | [string] |The name of the folder containing the genome fasta file, suffix array file and query file|
-|--epsilon |  [int]   |Epsilon value to be used to create pla-index|
+options:
+  -h, --help            show this help message and exit
+  --genome_folder GENOME_FOLDER
+                        Name of the folder containing the genome, suffix array and query files [Required]
+  --epsilon EPSILON     Epsilon value to be used to create pla-index [Required]
+  --index_type INDEX_TYPE
+                        Whether to build "basic-pla" or "repeat-pla" index. "repeat-pla" is generally the better option
+                        but can slow down rank queries unless the -r option is also used.(default: basic-pla)
+  --fast_rank FAST_RANK
+                        Construct an extra bitvector with the same length as the suffix array. Use this to speed up rank
+                        queries. Possible values: "y" for yes and "n" for no. (default: n)
+  --query_type QUERY_TYPE
+                        Whether to do "search" or "rank" query. "rank" gives you the value of the first position in the
+                        suffix array where the query is found. "search" on the other hand, also returns the value where
+                        the query appears, but it might not be the very first spot. (default: search)
+  --kmer_size KMER_SIZE
+                        Kmer size for which pla-index will be calculated (default: 21)
+  --code_path CODE_PATH
+                        Path where the source code is (default: ../src/)
+  --exec_path EXEC_PATH
+                        Path where the executables will be stored (default: ../executables/)
+  --l_bits L_BITS       How many elements to store in the shortcut array, D. |D| = 2^l (default: 16)
+  --query_tag QUERY_TAG
+                        QUERY_TAG to identify which query file to use from GENOME.QUERY_TAG.query.txt (default: 1)
+  --sdsl_lib_path SDSL_LIB_PATH
+                        Path to the SDSL library folder (default: ~/lib)
+  --sdsl_inc_path SDSL_INC_PATH
+                        Path to the SDSL include folder (defaul: ~/include)
+```
 
-Optional parameters with required argument:
-
-| Parameter  | Type    | Description    |
-|-----------------|-------------|-------------|
-|--index_type     |[string] | What kind of index type to construct and/or use. Possible values: "basic-pla" or "repeat-pla". (default: basic-pla)|
-|--fast_rank     |[string] | Whether to enable fast rank operation by creating a bit vector. Possible values: "y" for yes and "n" for no. (default: "n")|
-|--query_type | [string] | Whether do a "search" query or "rank" query. (default: "search")  |
-|--kmer_size      |[int] | Kmer size for which pla-index will be created (default: 21)|
-|--code_path      |[string] | Path where the source code is (default: ../src/)|
-|--exec_path      |[string] | Path where the executables will be stored (default: ../executables/)|
-|--l_bits         |[int]  | How many elements to store in the shortcut array, D. &#124;D&#124; = 2<sup>l</sup> (default: 16)|
-|--query_tag      |[int] | Which query file to use (default: 1)|
-|--sdsl_lib_path  |[string] | Path to the SDSL library folder (default: ~/lib)|
-|--sdsl_inc_path  |[string] | Path to the SDSL include folder (defaul: ~/include)|
-
-Here is an example assuming we have the `ecoli` folder inside the `tests` folder:
+Here is an example using the `ecoli` folder inside the `tests` folder:
 
 ```
 cd tests

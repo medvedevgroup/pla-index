@@ -1,7 +1,12 @@
+/**
+ * Source: https://github.com/jermp/pthash/
+*/
+
 #pragma once
 
 #include <cassert>
 #include <cstdint>
+#include <string>
 
 #if defined(__x86_64__)
 #include <immintrin.h>
