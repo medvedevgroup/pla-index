@@ -14,7 +14,7 @@ int main(int argc, char **argv){
     int64_t kmer_size = opt.kmer_size;
     int64_t eps = opt.eps;
     string indx_fn = opt.indx_fn;
-    int64_t lp_bits = opt.lp_bits;
+    int64_t lookup_count = opt.lookup_count;
     string indx_type = opt.indx_type;
     bool is_fast_rank = opt.is_fast_rank;
 
@@ -29,10 +29,10 @@ int main(int argc, char **argv){
     sa.Load(gn_fn, sa_fn);
     sa.set_kmer_size(kmer_size);
 
-    pla_index pla(eps, lp_bits, sa.get_largest(), is_fast_rank, sa.size(), it);
+    pla_index pla(eps, is_fast_rank, sa.size(), it);
 
     auto s1 = std::chrono::system_clock::now();
-    pla.build_index(sa.begin());
+    pla.build_index(sa.begin(), lookup_count, sa.get_kmer_size());
     auto s2 = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = s2-s1;
 

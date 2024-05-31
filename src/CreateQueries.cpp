@@ -42,7 +42,7 @@ string GetKmerAtStringPos(int64_t idx, int64_t kmer_size){
     return query;
 }
 
-void WriteQueryKmers(int32_t nQueries, string fn_suff,
+void WriteQueryKmers(int32_t nQueries, string fn_pref,
         int kmer_size, int nFiles)
 {
     int64_t idx;
@@ -56,7 +56,7 @@ void WriteQueryKmers(int32_t nQueries, string fn_suff,
     cout<<"Writing start..\n";
 
     for(int64_t n=1; n<=nFiles; n++){
-        ofstream queryFile(fn_suff+"."+ to_string(n)+".query.txt");
+        ofstream queryFile(fn_pref+"."+ to_string(n)+".query.txt");
         for(int i=0; i<query_kmers.size(); i++){
             // queryFile<<"@read"<<(i+1)<<endl;
             queryFile<<query_kmers[i]<<endl;
@@ -100,14 +100,14 @@ std::ifstream::pos_type filesize(const char* filename)
 int main(int argc, char **argv){
     string genomeFile = argv[1]; 
     string sa_file = argv[2];
-    string fn_suffix = argv[3];
+    string fn_prefix = argv[3];
     int kmer_size = stoi(argv[4]);
     int32_t nQueries = stoi(argv[5]);
     int64_t nFiles = stoi(argv[6]);
     fSize = filesize(genomeFile.c_str());
     LoadGenomeString(genomeFile);
     LoadSA(sa_file);    
-    WriteQueryKmers(nQueries,fn_suffix, kmer_size, nFiles);
+    WriteQueryKmers(nQueries,fn_prefix, kmer_size, nFiles);
     cout<<nFiles<<" Query File(s) Created"<<endl;
     return 0;
 }

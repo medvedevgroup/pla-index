@@ -11,49 +11,187 @@
 #include <cstdlib>
 #include <chrono>
 #include <cassert>
-#include "BitPacking.h"
 #include "piecewise_linear_model.hpp"
 #include "utils/ef_sequence.hpp"
 #include "utils/essentials.hpp"
 #include "../sdsl/dac_vector.hpp"
 
-
 using namespace std;
 
 enum INDX_TYPE {BASIC_PLA, REPEAT_PLA};
 
+#define DEBUG_PRINT 0
+#define KNOT_BS_THRES 64
+
 class pla_index{
 private:
     using canonical_segment = typename OptimalPiecewiseLinearModel<int64_t, uint64_t>::CanonicalSegment;
-    int64_t epsilon, max_data_ratio, lp_bits, knot_bs_thres;
-    uint64_t shift_bits, dic_size, total_data_points;
+    int64_t epsilon, max_data_ratio, lp_bits;
+    uint64_t shift_bits, index_size, total_data_points, 
+        x_width, ef_width, y_diff_width, pref_width, x_const_width;
+
     bool is_fast_rank, is_rank_query;
     
-    vector<uint64_t> indirection_vec, index_bitvec;
+    vector<uint64_t> index_bitvec, x_enc_vec, prefix_vec;
 
-    CBitPacking brk_uniform_diff_packed, diff_packd;
     arank::ef_sequence<false> y_range_beg;
-    sdsl::dac_vector_dp<> sa_diff_dac_vec;
     INDX_TYPE indx_type;
-
+    struct brkpnt_values{
+        int64_t x1, diff1, ef1, ef2, 
+            x2_x1, brkpnt;
+    };
+    
 public:
-    pla_index(int64_t eps, int64_t lp_bits, uint64_t largest,
-            bool is_fast_rank, uint64_t total_points, INDX_TYPE indx_type);
+    // constructor at index build
+    pla_index(int64_t eps, bool is_fast_rank, 
+            uint64_t total_points, INDX_TYPE it):
+            epsilon(eps), is_fast_rank(is_fast_rank),
+            total_data_points(total_points),
+            indx_type(it)
+    {}
     
-    pla_index(int64_t knot_bs_thres, bool is_rank_query);
+    // constructor at query
+    pla_index(bool is_rank_query):
+        is_rank_query(is_rank_query)
+    {}
 
-    void insert_to_ind_vec(int64_t brk_beg_kval, int64_t brk_indx);
 
-    void encode_knots(const vector<int64_t> &brk_kval_vec);    
+    void SetBit(uint64_t &number, uint64_t pos){
+        uint64_t mask = 1ULL << (64-pos); // pos = [1, 64]
+        number |= mask;
+    }
+
+    void enc_value(uint64_t v, vector<uint64_t> &m_bits, const uint64_t& mask, uint64_t& width,
+            uint64_t &m_cur_block, uint64_t &m_cur_shift){
+        m_bits[m_cur_block] &= ~(mask << m_cur_shift);
+        m_bits[m_cur_block] |= v << m_cur_shift;
+
+        uint64_t res_shift = 64 - m_cur_shift;
+        if (res_shift < width) {
+            ++m_cur_block;
+            m_bits.push_back(0);
+            m_bits[m_cur_block] &= ~(mask >> res_shift);
+            m_bits[m_cur_block] |= v >> res_shift;
+            m_cur_shift = -res_shift;
+        }
+
+        m_cur_shift += width;
+
+        if (m_cur_shift == 64) {
+            m_cur_shift = 0;
+            ++m_cur_block;
+            m_bits.push_back(0);
+        }
+    }
+
+    void encode_values(const vector<uint64_t> &brk_kval_vec, 
+        const vector<uint64_t> &brk_diff_vec, int64_t lookup_count){
+        
+        // lp bits taken input as lookup count
+        lp_bits = ceil(log2((brk_kval_vec.size()/lookup_count)));
+        uint64_t max_bits = shift_bits;
+        shift_bits -= lp_bits;
+        max_data_ratio = ((1ULL << (max_bits)) - 1)/(index_size - 1);
+        if(DEBUG_PRINT){
+            cout<<"lp bits: "<<lp_bits
+                <<" shift bits: "<<shift_bits
+                <<" total bits: "<<max_bits
+                <<endl;
+        }
+        uint64_t largest = 0;
+
+        for(int64_t i=0; i<index_size; i++){
+            int64_t diff = int64_t(brk_kval_vec[i]) - i*max_data_ratio;
+            uint64_t val = add_bit_based_on_sign(diff);
+            if(val > largest) largest = val;
+        }
+        
+        auto bits_needed = [](int64_t n) -> int64_t {
+            return (ceil(log2(n)) == floor(log2(n)))
+                ? ceil(log2(n)) + 1
+                : ceil(log2(n));
+        };
+
+        
+        // +1 because includes negative number
+        y_diff_width = bits_needed(epsilon*2) + 1;
+        x_width = bits_needed(largest);
+        pref_width = bits_needed(index_size - 1);
+        ef_width = y_range_beg.cv_width();
+
+        auto get_mask = [] (int64_t n) -> uint64_t {
+            return (1ULL << n) - 1;
+        };
+
+        const uint64_t y_diff_mask = get_mask(y_diff_width);
+        const uint64_t x_mask = get_mask(x_width);
+        const uint64_t pref_mask = get_mask(pref_width);
+        const uint64_t ef_mask = get_mask(ef_width);
+
+        x_const_width = x_width + ef_width + y_diff_width;
+
+        if(DEBUG_PRINT){
+            cout<<"width\n"
+                <<"x: "<<x_width
+                <<" y_diff: "<<y_diff_width
+                <<" pref: "<<pref_width
+                <<" ef: "<<ef_width
+                <<" x_const_width: "<<x_const_width
+                <<" max data ratio: "<<max_data_ratio
+                <<" largest: "<<largest
+                <<endl;
+        }
+
+        
+
+        uint64_t prefix_count=0, x_enc_block = 0, x_enc_shift = 0, 
+            prefix_enc_block=0, prefix_enc_shift=0;
+        
+        x_enc_vec.push_back(0);
+        prefix_vec.push_back(0);
+
+        for(int64_t i=0; i<index_size; i++){
+            int64_t diff = int64_t(brk_kval_vec[i]) - i*max_data_ratio;
+            uint64_t val = add_bit_based_on_sign(diff);
+
+            enc_value(val, x_enc_vec, x_mask, 
+                x_width, x_enc_block, x_enc_shift);
+
+            enc_value(y_range_beg.cv_access(i), x_enc_vec, 
+                ef_mask, ef_width, x_enc_block, x_enc_shift);
+            
+            enc_value(brk_diff_vec[i], x_enc_vec, y_diff_mask, 
+                y_diff_width, x_enc_block, x_enc_shift);
+
+            if(DEBUG_PRINT){
+                if(i > 1635555 && i < 1635558){
+                    cout<<i<<" x_val: "<<brk_kval_vec[i]
+                        <<" cv val: "<<y_range_beg.cv_access(i)
+                        <<" y_start[]: "<<y_range_beg.access(i, 
+                                    y_range_beg.cv_access(i), ef_width)
+                        <<" diff: "<<brk_diff_vec[i]
+                        <<endl;
+                }
+            }
+            
+            int64_t lp_bit_value = brk_kval_vec[i] >> shift_bits;
+            if(prefix_count <= lp_bit_value){
+                for(int64_t pl=prefix_count; pl<lp_bit_value+1; pl++){
+                    prefix_count++;
+                    enc_value(i, prefix_vec, pref_mask, pref_width, 
+                        prefix_enc_block, prefix_enc_shift);
+                }
+            }
+        }
+
+        // this ensures upto index_size-1 will be checked for the last entry
+        enc_value(index_size-1, prefix_vec, pref_mask, pref_width, 
+            prefix_enc_block, prefix_enc_shift);
+    }
     
-    void SetBit(uint64_t &number, uint64_t pos);
-    void save_unpacked(string indx_fn);
-    void save_bit_info(string indx_fn, CBitPacking &ind_diff_pack);
-    uint64_t get_size_in_bytes();
-    inline uint64_t get_num_segments() const {return dic_size;}
-
-    const vector<uint64_t> get_processed_ind_vec() const;
-    int64_t binary_search(int64_t lo, int64_t hi, const int64_t kval) const;
+    
+    // uint64_t get_size_in_bytes();
+    inline uint64_t get_num_segments() const {return index_size;}
     
     template <typename DataType>
     uint64_t get_first_index(int64_t idx, const uint64_t query_val, 
@@ -94,7 +232,7 @@ public:
          * what kind of dictionary [n-1]
          * is fast rank enabled [n-2]
         */
-        uint8_t flag_bits;
+        uint8_t flag_bits = 0;
         if(data.is_kmer_size_needed()) flag_bits = 1;
         if(indx_type == BASIC_PLA) flag_bits |= 2;
         if(is_fast_rank) flag_bits |= 4;
@@ -107,36 +245,30 @@ public:
 
         uint8_t t_lp_bits = lp_bits;
         essentials_arank::save_pod(os, t_lp_bits);
-        vector<uint64_t> ind_diff_vec = get_processed_ind_vec();
-        CBitPacking ind_diff_pack(false);
-        ind_diff_pack.BuilidPackedVector(ind_diff_vec);
-        ind_diff_pack.Save_os(os);
-        uint32_t nBrkpnts = dic_size;
-        
-        essentials_arank::save_pod(os, nBrkpnts);
-        // os.write(reinterpret_cast<char const*>(&nBrkpnts),
-                    //   sizeof(nBrkpnts));
-        
-        brk_uniform_diff_packed.Save_os(os);
 
-        if (indx_type == REPEAT_PLA)
-            sa_diff_dac_vec.serialize(os);
-        else if(indx_type == BASIC_PLA)
-            diff_packd.Save_os(os);
+        uint8_t pref_width_t = pref_width;
+        essentials_arank::save_pod(os, pref_width_t);
+        essentials_arank::save_vec(os, prefix_vec);
+
+        uint32_t index_size_t = index_size;        
+        essentials_arank::save_pod(os, index_size_t);
+        
+        uint8_t x_width_t = x_width;
+        essentials_arank::save_pod(os, x_width_t);
+        uint8_t ef_width_t = ef_width;
+        essentials_arank::save_pod(os, ef_width_t);
+
+        essentials_arank::save_vec(os, x_enc_vec);
 
         y_range_beg.save(os);
-        uint16_t t_err_th = epsilon;
-        essentials_arank::save_pod(os, t_err_th);
-        // os.write(reinterpret_cast<char const*>(&t_err_th),
-        //               sizeof(t_err_th));
-        essentials_arank::save_pod(os, is_fast_rank);
+
+        uint16_t epsilon_t = epsilon;
+        essentials_arank::save_pod(os, epsilon_t);
+
         if(is_fast_rank){
             os.write(reinterpret_cast<char const*>(index_bitvec.data()),
                     index_bitvec.size() * sizeof(uint64_t));
         }
-
-        // save_unpacked(indx_fn);
-        // save_bit_info(indx_fn, ind_diff_pack);
     }
     
     // suffix array version
@@ -163,142 +295,344 @@ public:
             essentials_arank::load_pod(is, t_kmer_size);
             data.set_kmer_size(t_kmer_size);
         }
+
         total_data_points = data.size();
-        uint64_t largest = data.get_largest();
-        uint64_t total_bits;
-        if(ceil(log2(largest)) == floor(log2(largest))) total_bits = ceil(log2(largest)) + 1;
-        else total_bits = ceil(log2(largest));
+        // uint64_t largest = data.get_largest();
+        uint64_t total_bits = 2*data.get_kmer_size();
+        // if(ceil(log2(largest)) == floor(log2(largest))) total_bits = ceil(log2(largest)) + 1;
+        // else total_bits = ceil(log2(largest));
         
         uint8_t lp_bits_t;
-        // is.read(reinterpret_cast<char*>(&lp_bits_t), sizeof(lp_bits_t));
         essentials_arank::load_pod(is, lp_bits_t);
         lp_bits = lp_bits_t;
         shift_bits = total_bits - lp_bits;
-        
-        uint64_t indir_max = 1ULL << lp_bits;
 
-        CBitPacking ind_diff_pack(false);
-        ind_diff_pack.Load_is(is, (indir_max-1));
-        // cout<<"ind diff vec isze: "<<indir_max-1<<endl;
-        vector<int64_t> indir_diff_vec = ind_diff_pack.GetUnpackedVector();
-        // indirection_table = new int64_t[indir_max];
-        indirection_vec.resize(indir_max);
-        indirection_vec[0] = 0;
-        for(int64_t i=0; i<indir_max-1; i++){
-            indirection_vec[i+1] = indirection_vec[i] + indir_diff_vec[i];
-        }
-        // how many breakpoints
-        uint32_t dic_size_t;
-        essentials_arank::load_pod(is, dic_size_t);
-        // is.read(reinterpret_cast<char*>(&dic_size_t), sizeof(dic_size_t));
+        uint8_t pref_width_t;
+        essentials_arank::load_pod(is, pref_width_t);
+        pref_width = pref_width_t;
+        essentials_arank::load_vec(is, prefix_vec);
+
+        // if(DEBUG_PRINT){
+            // cout<<"Size: Prefix table: \n"
+            // <<"width: "<<pref_width
+            // <<" size: "<<prefix_vec.size()
+            // <<endl;
+        // }
         
-        dic_size = dic_size_t;
-        // cout<<"#breakpoints: "<<dic_size<<endl;
-        // brk_uniform_diff_packed.Load(fp, dic_size);
-        brk_uniform_diff_packed.Load_is(is, dic_size);
-        max_data_ratio = ((1ULL << total_bits) - 1)/(dic_size-1);
-        if (indx_type == REPEAT_PLA)
-            sa_diff_dac_vec.load(is);
-        else if(indx_type == BASIC_PLA)
-            diff_packd.Load_is(is, dic_size-1);
+        uint32_t index_size_t;
+        essentials_arank::load_pod(is, index_size_t);
+        index_size = index_size_t;
+        max_data_ratio = ((1ULL << total_bits) - 1)/(index_size-1);
+
+        // if(DEBUG_PRINT)
+            cout<<"#breakpoints: "<<index_size<<endl;
+            cout<<"lp bits: "<<lp_bits<<endl;
         
-        // cout<<"ef load\n";
+        uint8_t x_width_t, ef_width_t;
+        essentials_arank::load_pod(is, x_width_t);
+        essentials_arank::load_pod(is, ef_width_t);
+        x_width = x_width_t;
+        ef_width = ef_width_t;
+
+        essentials_arank::load_vec(is, x_enc_vec);
+
         y_range_beg.load(is);
-        // cout<<"max err load\n";
-        uint16_t max_error_t;
-        essentials_arank::load_pod(is, max_error_t);
-        // is.read(reinterpret_cast<char*>(&max_error_t), sizeof(max_error_t));
-        // err = fread(&max_error_t, sizeof(uint16_t), 1, fp);
-        epsilon = (int64_t)max_error_t;
-        essentials_arank::load_pod(is, is_fast_rank);
+        
+        uint16_t epsilon_t;
+        essentials_arank::load_pod(is, epsilon_t);
+        epsilon = epsilon_t;
+        
+        y_diff_width = (ceil(log2(epsilon*2)) == floor(log2(epsilon*2)))
+                ? ceil(log2(epsilon*2)) + 1 + 1
+                : ceil(log2(epsilon*2)) + 1;
+        
+        x_const_width = x_width + ef_width + y_diff_width;
+
+        // if(DEBUG_PRINT){
+            // cout<<"width\n"
+            //     <<"x: "<<x_width
+            //     <<" y_diff: "<<y_diff_width
+            //     <<" pref: "<<pref_width
+            //     <<" ef: "<<ef_width
+            //     <<" x_const_width: "<<x_const_width
+            //     <<endl;
+        // }
+        
+        cout<<"PLA index loaded"<<endl;
+        
         if(is_fast_rank){
             int64_t bitvec_size = total_data_points/64 + 1;
             index_bitvec.resize(bitvec_size);
             is.read(reinterpret_cast<char*>(index_bitvec.data()), 
-                static_cast<std::streamsize>(sizeof(uint64_t) * bitvec_size));  
-            // err = fread(&index_bitvec[0], sizeof(uint64_t), bitvec_size, fp);
+                static_cast<std::streamsize>(sizeof(uint64_t) * bitvec_size));
         }
     }
 
-    // suffix array version
+    inline int64_t get_signed_value(int64_t value) const{
+        return value & 1
+            ? -(value>>1)
+            : value>>1;
+    }
+
+
+    inline int64_t predict(int64_t q, int64_t x1, int64_t y1, int64_t x2_x1, int64_t y2) const{
+        return round(y1 + ((double)(q - x1)/x2_x1 )*(y2 - y1));
+    }
+
+    inline uint64_t get_val(uint64_t& pos, const uint64_t& mask, const uint64_t& width) const{
+        uint64_t block = pos >> 6;
+        uint64_t shift = pos & 63;
+        pos += width;
+        return shift + width <= 64
+                    ? x_enc_vec[block] >> shift & mask
+                    : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & mask);
+    }
+
+    void binary_search(uint64_t lo, uint64_t hi, const int64_t query_val, 
+            brkpnt_values &bv) const
+    {
+        int64_t mid, midVal, pos, rest_val,
+            block, shift, prev_x = -1, curr_x, rest_bits = x_const_width - x_width, mdr;
+        const uint64_t x_total_width = x_width + rest_bits;
+        const uint64_t rest_mask = (1ULL << rest_bits) - 1;
+        const uint64_t ef_mask = (1ULL << ef_width) - 1;
+        const uint64_t x_mask = (1ULL << x_width) - 1;
+
+        while(1){
+            if(hi-lo <= KNOT_BS_THRES){
+                mdr = max_data_ratio * lo;
+                pos = lo*x_total_width;
+                for (int64_t i = lo; i <= hi; i++)
+                {
+                    block = pos >> 6;
+                    shift = pos & 63;
+                    curr_x = shift + x_width <= 64
+                        ? x_enc_vec[block] >> shift & x_mask
+                        : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & x_mask);
+                    curr_x = get_signed_value(curr_x) + mdr;
+                    // if(DEBUG_PRINT){
+                    //     cout<<i<<" "<<lo<<" "<<hi<<" "<<x_total_width<<" "<<pos<<" "
+                    //     <<curr_x<<" "<<query_val<<endl;
+                    // }
+                    
+                    if(curr_x >= query_val) {
+                        pos += x_width;
+                        block = pos >> 6;
+                        shift = pos & 63;
+                        rest_val = shift + rest_bits <= 64
+                            ? x_enc_vec[block] >> shift & rest_mask
+                            : (x_enc_vec[block] >> shift) | 
+                                (x_enc_vec[block + 1] << (64 - shift) & rest_mask);
+                        bv.ef2 = rest_val & ef_mask;
+
+                        if(prev_x != -1){
+                            bv.x1 = prev_x;
+                            pos -= x_total_width;
+                            block = pos >> 6;
+                            shift = pos & 63;
+                            rest_val = shift + rest_bits <= 64
+                                ? x_enc_vec[block] >> shift & rest_mask
+                                : (x_enc_vec[block] >> shift) | 
+                                    (x_enc_vec[block + 1] << (64 - shift) & rest_mask);                        
+                            
+                            bv.ef1 = rest_val & ef_mask;
+                            bv.diff1 = rest_val >> ef_width;
+                            // bv.x2_x1 = curr_x - prev_x;
+                            // if(DEBUG_PRINT){
+                            //     cout<<"In bs x:\n";
+                            //     cout<<"diff1: "<<bv.diff1<<" ef1 "<<bv.ef1
+                            //         <<" ef2: "<<bv.ef2<<endl;
+                            // }                            
+                        }
+
+                        // if prev_x == -1, this means bv already has all the value it needs
+                        bv.x2_x1 = curr_x - bv.x1;
+                        bv.brkpnt = i-1;
+                        return;
+                    }
+                    prev_x = curr_x;
+                    pos += x_total_width;
+                    mdr += max_data_ratio;
+                }
+                cout<<"Not found\n";
+                cout<<query_val<<endl;
+                exit(-1);
+            } 
+            
+            mid = (lo + hi) >> 1;
+            // prefetch
+
+            pos = mid * x_total_width;
+            mdr = max_data_ratio*mid;
+            
+            block = pos >> 6;
+            shift = pos & 63;
+            midVal = shift + x_width <= 64
+                ? x_enc_vec[block] >> shift & x_mask
+                : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & x_mask);
+            midVal = get_signed_value(midVal) + mdr;
+
+            // if(DEBUG_PRINT)
+            //     cout<<mid<<" "<<midVal<<" "<<query_val<<endl;
+            
+            if (midVal == query_val) {
+                pos += x_width;
+                block = pos >> 6;
+                shift = pos & 63;
+                rest_val = shift + rest_bits <= 64
+                    ? x_enc_vec[block] >> shift & rest_mask
+                    : (x_enc_vec[block] >> shift) | 
+                        (x_enc_vec[block + 1] << (64 - shift) & rest_mask);
+                
+                bv.x1 = midVal;
+                bv.ef1 = rest_val & ef_mask;
+                bv.diff1 = rest_val >> ef_width;
+                bv.brkpnt = mid;
+                
+                pos += rest_bits;
+                block = pos >> 6;
+                shift = pos & 63;
+                bv.x2_x1 = shift + x_width <= 64
+                    ? x_enc_vec[block] >> shift & x_mask
+                    : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & x_mask);
+                bv.x2_x1  = get_signed_value(bv.x2_x1) + mdr+ max_data_ratio - midVal;
+                
+                pos += x_width;
+                block = pos >> 6;
+                shift = pos & 63;
+                rest_val = shift + rest_bits <= 64
+                    ? x_enc_vec[block] >> shift & rest_mask
+                    : (x_enc_vec[block] >> shift) | 
+                        (x_enc_vec[block + 1] << (64 - shift) & rest_mask);
+                
+                bv.ef2 = rest_val & ef_mask;
+                // if(DEBUG_PRINT)
+                //     cout<<"ef "<<bv.ef1<<" "<<rest_val<<" "<<bv.diff1<<" "<<bv.x2_x1<<endl;
+                return;
+            }
+            else if(midVal > query_val){ 
+                hi = mid;
+            }
+            else{ 
+                lo = mid;
+            }
+        }
+
+    }
+
     template <typename DataType>
-    int64_t query(const int64_t query_val, const string &query, const DataType &data) const{
-        uint64_t lp_bit_value = query_val >> shift_bits;
-        int64_t brkpnt, query_pred, direction;
-        int64_t ind_brk_beg_idx = indirection_vec[lp_bit_value];
-        bool isOnIntersection = false;
-
-        int64_t ind_point_val = brk_uniform_diff_packed.GetValueAt(ind_brk_beg_idx)+max_data_ratio*ind_brk_beg_idx;        
-
-        if(ind_point_val == query_val){
-            query_pred = y_range_beg.access(ind_brk_beg_idx) - epsilon;
+    inline int64_t query(const int64_t query_val, 
+        const string &query, const DataType &data) const
+    {
+        if(indx_type == BASIC_PLA){
+            return query_concise_basic_pla(query_val, query, data);
         }
         else{
-            if(ind_point_val < query_val){
-                int64_t end_idx = (lp_bit_value == indirection_vec.size() - 1) ? dic_size - 1 : indirection_vec[lp_bit_value + 1] - 1;
-                brkpnt = binary_search(ind_brk_beg_idx, end_idx, query_val);
-            }
-            else{
-                do{
-                    --lp_bit_value;
-                    ind_point_val = indirection_vec[lp_bit_value];
-                }while(ind_point_val == ind_brk_beg_idx);
-                brkpnt = binary_search(ind_point_val, ind_brk_beg_idx, query_val);
-            }
-            // cout<<query_val<<" "<<brkpnt<<endl;
-            const int64_t brk_beg_kval = brk_uniform_diff_packed.GetValueAt(brkpnt)+max_data_ratio*brkpnt;
-            if(brk_beg_kval == query_val) {
-                query_pred = y_range_beg.access(brkpnt) - epsilon;
-            }
-            else{
-                const int64_t brk_end_kval = brk_uniform_diff_packed.GetValueAt(brkpnt+1)+max_data_ratio*(brkpnt+1);
-                const int64_t brk_beg_sa_indx = int64_t(y_range_beg.access(brkpnt)) - epsilon;
-                int64_t brk_end_sa_indx;
-                switch (indx_type){
-                case REPEAT_PLA:
-                    {
-                    int64_t diff_val = sa_diff_dac_vec[brkpnt];
-                    brk_end_sa_indx = (diff_val & 1)
-                                        ? y_range_beg.access(brkpnt + 1) - (diff_val >> 1) - epsilon
-                                        : y_range_beg.access(brkpnt + 1) + (diff_val >> 1) - epsilon;
-                    break;
-                    }
-                case BASIC_PLA:
-                    {
-                    brk_end_sa_indx = y_range_beg.access(brkpnt + 1) - 
-                        diff_packd.GetValueAt(brkpnt) - epsilon;
-                    break;
-                    }
-                }
-                // cout<<"Interval: \n";
-                // cout<<query_val<<endl;
-                // cout<<brk_beg_kval<<" "
-                //     <<brk_end_kval<<" "
-                //     <<brk_beg_sa_indx<<" "
-                //     <<brk_end_sa_indx<<endl;
-                query_pred = round(brk_beg_sa_indx + 
-                        ((double)(query_val - brk_beg_kval)/(brk_end_kval - brk_beg_kval) )*
-                        (brk_end_sa_indx - brk_beg_sa_indx));
-                // cout<<"Here, Pred: "<<query_pred<<endl;
-                // std::cout<<"Pred: "<<query_pred<<" "<<GetKmerAtStrPos(sa[query_pred])<<endl;
-            }  
-            // cout<<"Second, Pred: "<<query_pred<<endl;          
+            ;
         }
-        // std::cout<<"After bracket Pred:  "<<query_pred<<endl;
-        // <<" "<<GetKmerAtStrPos(sa[query_pred])<<endl;
-        // query_pred -= epsilon;
-        // if(query_pred < int64_t(0)) query_pred = int64_t(0);        
-        // if(query_pred > int64_t(total_data_points)-1) query_pred = int64_t(total_data_points)-1;
-        query_pred = std::clamp(query_pred, int64_t(0), int64_t(total_data_points) - 1);
-        // cout<<query_pred<<endl;
-        if (!is_rank_query){
-            return data.BinarySearch(query , max(query_pred - epsilon, int64_t(0)), 
-                min(query_pred + epsilon, int64_t(total_data_points)-1), is_rank_query);
-        }
-        return get_first_index(data.BinarySearch(query , max(query_pred - epsilon, int64_t(0)), 
-                min(query_pred + epsilon, int64_t(total_data_points)-1), is_rank_query), query_val, data);
-
     }
+
+    template <typename DataType>
+    int64_t query_concise_basic_pla(const int64_t query_val, 
+        const string &query, const DataType &data) const
+    {
+        int64_t query_pred, lo, brkpnt;
+        brkpnt_values bv;
+        uint64_t lp_bit_value = query_val >> shift_bits;
+        const uint64_t ef_mask = (1ULL << ef_width) - 1;
+        const uint64_t x_mask = (1ULL << x_width) - 1;
+        const uint64_t y_diff_mask = (1ULL << y_diff_width) - 1;
+        const uint64_t pref_mask = (1ULL << pref_width) - 1;
+
+        uint64_t pos = lp_bit_value*pref_width;
+        uint64_t block = pos >> 6;
+        uint64_t shift = pos & 63;
+        uint64_t indx1 = (shift + pref_width <= 64) 
+            ?   prefix_vec[block]>>shift & pref_mask
+            :   (prefix_vec[block]>>shift) | (prefix_vec[block+1] << (64-shift) & pref_mask);
+        
+        pos += pref_width;
+        block = pos >> 6;
+        shift = pos & 63;
+        uint64_t indx2 = (shift + pref_width <= 64) 
+            ?   prefix_vec[block]>>shift & pref_mask
+            :   (prefix_vec[block]>>shift) | (prefix_vec[block+1] << (64-shift) & pref_mask);
+        
+        int64_t x2, ef2, diff2, mdr = max_data_ratio*indx1;
+        uint64_t rest_bits = x_const_width - x_width;
+        const uint64_t rest_mask = (1ULL << rest_bits)-1;
+        uint64_t rest_val;
+
+        if(indx1 > 0){
+            pos = (indx1-1) * x_const_width;
+            x2 = get_signed_value(get_val(pos, x_mask, x_width)) + mdr - max_data_ratio;
+            rest_val = get_val(pos, rest_mask, rest_bits);
+
+            ef2 = rest_val & ef_mask;
+            diff2 = rest_val >> ef_width;
+        }
+        else{
+            pos = indx1 * x_const_width;
+        }
+
+        bv.x1 = get_signed_value(get_val(pos, x_mask, x_width)) + mdr;
+        rest_val = get_val(pos, rest_mask, rest_bits);
+
+        bv.ef1 = rest_val & ef_mask;
+        bv.diff1 = rest_val >> ef_width;
+
+        // if(DEBUG_PRINT){
+        //     cout<<"Before match\n"
+        //         <<"prefix index 1: "<<indx1<<" index 2: "<<indx2<<endl
+        //         <<"bv x1: "<<bv.x1<<" ef1: "<<bv.ef1<<" diff1: "<<bv.diff1<<endl;
+        //     if(indx1 > 0){
+        //         cout<<"x2: "<<x2<<" ef2: "<<ef2<<" diff2: "<<diff2<<endl;
+        //     }
+        // }
+
+        if(bv.x1 == query_val){
+            query_pred = y_range_beg.access(indx1, bv.ef1, ef_width) - epsilon;
+        }
+        else{
+            if(bv.x1 < query_val){
+                // indx2 - 1 should also work fine
+                binary_search(indx1+1, indx2, query_val, bv);
+            }
+            else{
+                bv.x2_x1 = bv.x1 - x2;
+                bv.x1 = x2; // x2 is the previous element
+                bv.ef2 = bv.ef1;
+                bv.ef1 = ef2;
+                bv.diff1 = diff2;
+                bv.brkpnt = indx1 - 1;
+            }
+
+            auto [knot_si, val2] = y_range_beg.pair(bv.brkpnt, bv.ef1, bv.ef2, ef_width);
+            int64_t knot_ei = val2 -  get_signed_value(bv.diff1);
+
+            query_pred = predict(query_val, bv.x1, knot_si, bv.x2_x1,
+                knot_ei) - epsilon;
+
+            // if(DEBUG_PRINT){
+            //     cout<<"After query_pred\n"
+            //         <<"x1: "<<bv.x1<<" q: "<<query_val<<" x2: "<<bv.x1 + bv.x2_x1
+            //         <<"\ny1: "<<knot_si<<" y2: "<<knot_ei
+            //         <<" next knot si: "<<val2
+            //         <<" pred: "<<query_pred
+            //         <<endl;
+                    
+            // }
+        }
+        
+        query_pred = std::clamp(query_pred, int64_t(0), int64_t(total_data_points) - 1);
+        
+        return !is_rank_query
+            ? data.BinarySearch(query , max(query_pred - epsilon, int64_t(0)), 
+                min(query_pred + epsilon, int64_t(total_data_points)-1), false)
+            : get_first_index(data.BinarySearch(query , max(query_pred - epsilon, int64_t(0)), 
+                min(query_pred + epsilon, int64_t(total_data_points)-1), true), query_val, data);        
+    }
+
 
     template<typename RandomIt>
     void calc_index_bv(RandomIt data){
@@ -326,7 +660,7 @@ public:
 
     template<typename RandomIt>
     int64_t get_pred_diff(const int64_t act_idx, int64_t pred_idx, 
-        RandomIt data) const{
+        RandomIt& data) const{
         if(pred_idx > total_data_points) pred_idx = total_data_points-1;
         if(act_idx == pred_idx){
             return 0;
@@ -369,28 +703,40 @@ public:
     }
 
     template<typename RandomIt>
-    void build_index(const RandomIt &begin){
+    void build_index(const RandomIt &begin, const uint64_t lookup_count,
+        int64_t kmer_size){
         if(indx_type == BASIC_PLA)
-            build_basic_pla_index(begin);
+            build_basic_pla_index(begin, lookup_count, kmer_size);
         else
-            build_rep_stretch_pla_index(begin);
+            // build_rep_stretch_pla_index(begin, lookup_count);
+            ;
     }
 
+    /**
+     * @brief add a 1 bit at the end of a negative number, and 
+     * 0 at the end of a positive number
+    */
+    inline uint64_t add_bit_based_on_sign(int64_t &num){
+        return num < 0
+            ? ((-num)<<1) | 1
+            : num << 1;
+    }
 
     template<typename RandomIt>
-    void build_basic_pla_index(const RandomIt &begin){
-        vector<uint64_t>  brk_sa_indx_vec, brk_sa_end_vec;
-        vector<int64_t> brk_kval_vec, brk_diff_vec;
+    void build_basic_pla_index(const RandomIt &begin, 
+        const uint64_t lookup_count,
+        int64_t kmer_size){
+        vector<uint64_t>  brk_sa_indx_vec, brk_kval_vec, brk_diff_vec;
         bool isFirst = true;
         int64_t prev_knot_ei=0, diff_from_curr_start;
         vector<canonical_segment> out(1);
 
         auto in_fun = [&](auto i) { return std::pair<int64_t, uint64_t>(begin[i], i); };
-            
+        int64_t _max = 0, bit_max = 0;
         auto out_fun = [&](auto cs, const int64_t last_x) { 
             out[0] = cs;
             brk_kval_vec.emplace_back(cs.get_first_x());
-            insert_to_ind_vec(cs.get_first_x(), brk_kval_vec.size()-1);
+            // insert_to_ind_vec(cs.get_first_x(), brk_kval_vec.size()-1);
             
             auto [knot_si, knot_ei] = cs.get_knot_intersection(last_x, epsilon);      
             brk_sa_indx_vec.emplace_back((uint64_t)knot_si); 
@@ -400,8 +746,25 @@ public:
                 return;
             }
             diff_from_curr_start = (int64_t)knot_si - prev_knot_ei;
-            brk_diff_vec.emplace_back(diff_from_curr_start);
+            if(abs(diff_from_curr_start) > _max) _max = abs(diff_from_curr_start);
+            
+            brk_diff_vec.emplace_back(add_bit_based_on_sign(diff_from_curr_start));
+            
+            if(brk_diff_vec[brk_diff_vec.size()-1] > bit_max) 
+                bit_max = brk_diff_vec[brk_diff_vec.size()-1];
+            
             prev_knot_ei = (int64_t)knot_ei;
+            if(DEBUG_PRINT){
+                if(cs.get_first_x() == 4398046511102){
+                    cout<<"Inside out func\n"
+                        <<"knot start: "<<cs.get_first_x()
+                        <<" knot end: "<<last_x
+                        <<" knot si: "<<knot_si
+                        <<" knot ei: "<<knot_ei
+                        <<endl;
+                }
+            }
+            
         };
         auto get_err = [&](int64_t act_idx, int64_t pred_idx){
             return get_pred_diff(act_idx, pred_idx, begin);
@@ -410,79 +773,29 @@ public:
         uint64_t seg_count = make_segmentation_basic_pla(total_data_points, 
                     epsilon, in_fun, out_fun, get_err);
 
-        brk_kval_vec.emplace_back(out[out.size()-1].get_last_x());
-        insert_to_ind_vec(out[out.size()-1].get_last_x(), brk_kval_vec.size()-1);
-        dic_size = brk_kval_vec.size();
-        uint64_t indir_max = 1ULL << lp_bits;
-        for(int64_t iv = indirection_vec.size(); iv < indir_max; iv++){
-            indirection_vec.emplace_back(brk_kval_vec.size()-1); 
+        if(brk_kval_vec[brk_kval_vec.size()-1] != out[0].get_last_x()){
+            brk_kval_vec.emplace_back(out[0].get_last_x());
+            uint64_t knot_si = begin.rank_of_last_entry() + epsilon;
+            brk_sa_indx_vec.emplace_back(knot_si);
+            diff_from_curr_start = (int64_t)knot_si - prev_knot_ei;
+            brk_diff_vec.emplace_back(add_bit_based_on_sign(diff_from_curr_start));
+            if(DEBUG_PRINT){
+                cout<<"Last entry rank: "<<knot_si - epsilon<<endl;
+                cout<<"prev knot ei: "<<prev_knot_ei
+                    <<" diff_from_curr: "<<diff_from_curr_start<<endl;
+            }
         }
+        index_size = brk_kval_vec.size();
 
-        auto [knot_si, knot_ei] = out[0].get_knot_intersection(out[0].get_last_x(), epsilon);
-        brk_sa_indx_vec.emplace_back((uint64_t)knot_ei);
-        brk_diff_vec.emplace_back(0);
-
-        diff_packd.BuilidSignedPackedVector(brk_diff_vec);        
+        brk_diff_vec.emplace_back(0);// dummy/senitel
+                
         y_range_beg.encode(brk_sa_indx_vec.data(), brk_sa_indx_vec.size());
-        encode_knots(brk_kval_vec);
+        
+        shift_bits = 2* kmer_size;
+        
+        encode_values(brk_kval_vec, brk_diff_vec, lookup_count);
+
         if(is_fast_rank) calc_index_bv(begin);
     }
 
-    template<typename RandomIt>
-    void build_rep_stretch_pla_index(const RandomIt &begin){
-        vector<uint64_t>  brk_sa_indx_vec, brk_sa_end_vec;
-        vector<int64_t> brk_kval_vec, brk_diff_vec;
-        bool isFirst = true;
-        int64_t prev_knot_ei=0, diff_from_curr_start;
-        vector<canonical_segment> out(1);
-
-        auto in_fun = [&](auto i) { return std::pair<int64_t, uint64_t>(begin[i], i); };
-            
-        auto out_fun = [&](auto cs, const int64_t last_x) { 
-            out[0] = cs;
-            brk_kval_vec.emplace_back(cs.get_first_x());
-            insert_to_ind_vec(cs.get_first_x(), brk_kval_vec.size()-1);
-            
-            auto [knot_si, knot_ei] = cs.get_knot_intersection(last_x, epsilon);      
-            brk_sa_indx_vec.emplace_back((uint64_t)knot_si); 
-            if(isFirst){
-                prev_knot_ei = (int64_t)knot_ei;
-                isFirst = false;
-                return;
-            }
-            diff_from_curr_start = prev_knot_ei - (int64_t)knot_si;
-            if(diff_from_curr_start < 0){
-                diff_from_curr_start *= -2;
-                diff_from_curr_start++;
-            }
-            else{
-                diff_from_curr_start *= 2;
-            }
-            brk_diff_vec.emplace_back(diff_from_curr_start);
-            prev_knot_ei = (int64_t)knot_ei;
-        };
-        auto get_err = [&](int64_t act_idx, int64_t pred_idx){
-            return get_pred_diff(act_idx, pred_idx, begin);
-        };
-
-        uint64_t seg_count = make_segmentation_rep_pla(total_data_points, epsilon, in_fun, out_fun, get_err);
-
-        brk_kval_vec.emplace_back(out[out.size()-1].get_last_x());
-        insert_to_ind_vec(out[out.size()-1].get_last_x(), brk_kval_vec.size()-1);
-        dic_size = brk_kval_vec.size();
-        uint64_t indir_max = 1ULL << lp_bits;
-        for(int64_t iv = indirection_vec.size(); iv < indir_max; iv++){
-            indirection_vec.emplace_back(brk_kval_vec.size()-1); 
-        }
-
-        auto [knot_si, knot_ei] = out[0].get_knot_intersection(out[0].get_last_x(), epsilon);
-        brk_sa_indx_vec.emplace_back((uint64_t)knot_ei);
-        brk_diff_vec.emplace_back(0);
-
-        sdsl::dac_vector_dp<> temp(brk_diff_vec);
-        sa_diff_dac_vec = temp;
-        y_range_beg.encode(brk_sa_indx_vec.data(), brk_sa_indx_vec.size());
-        encode_knots(brk_kval_vec);
-        if(is_fast_rank) calc_index_bv(begin);
-    }
 };

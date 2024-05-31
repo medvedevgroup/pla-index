@@ -25,6 +25,8 @@ struct ef_sequence{
         }
 
         uint64_t l = uint64_t((n && u / n) ? util::msb(u / n) : 0);
+        // std::cout<<"u value: "<<u<<" n: "<<n<<endl;
+        // std::cout<<"l value: "<<l<<endl;
         bit_vector_builder bvb_high_bits(n + (u >> l) + 1);
         compact_vector::builder cv_builder_low_bits(n, l);
 
@@ -56,31 +58,56 @@ struct ef_sequence{
         m_high_bits_d1.build(m_high_bits);
     }
 
-    inline uint64_t access(uint64_t i) const {
+    
+
+    inline uint64_t access(uint64_t i, uint64_t ef_cv_val, uint64_t ef_width) const {
         assert(i < size());
-        return ((m_high_bits_d1.select(m_high_bits, i) - i) << m_low_bits.width()) |
-               m_low_bits.access(i);
+        return ((m_high_bits_d1.select(m_high_bits, i) - i) << ef_width) |
+                ef_cv_val;
+        //       m_low_bits.access(i);
     }
 
-    inline uint64_t diff(uint64_t i) const {
-        assert(i < size() && encode_prefix_sum);
-        uint64_t low1 = m_low_bits.access(i);
-        uint64_t low2 = m_low_bits.access(i + 1);
-        uint64_t l = m_low_bits.width();
+    inline uint64_t cv_access(uint64_t i) const{
+        // TODO: Remove this condition
+        // if(m_low_bits.access(i) != m_low_bits[i]){
+        //     std::cerr<<"Access and [] does not return same value\n";
+        //     exit(EXIT_FAILURE);
+        // }
+        return m_low_bits.access(i);
+    }
+
+    inline uint64_t cv_width() const{
+        return m_low_bits.width();
+    }
+
+    inline std::pair<int64_t, int64_t> pair(uint64_t i, uint64_t low1, 
+        uint64_t low2, uint64_t ef_width) const {
+        assert(i < size());  // and encode_prefix_sum);
+        // uint64_t low1 = m_low_bits.access(i);
+        // uint64_t low2 = m_low_bits.access(i + 1);
+        // auto [low1, low2] = m_low_bits.get_two_consecutive_access(i);
+        // uint64_t l = m_low_bits.width();
         uint64_t pos = m_high_bits_d1.select(m_high_bits, i);
         uint64_t h1 = pos - i;
         uint64_t h2 = bit_vector::unary_iterator(m_high_bits, pos + 1).next() - i - 1;
-        uint64_t val1 = (h1 << l) | low1;
-        uint64_t val2 = (h2 << l) | low2;
+        uint64_t val1 = (h1 << ef_width) | low1;
+        uint64_t val2 = (h2 << ef_width) | low2;
+        return {val1, val2};
+    }
+
+    inline uint64_t diff(uint64_t i) const {
+        auto [val1, val2] = pair(i);
         return val2 - val1;
     }
 
+    // MODIFIED -> will not work, cv stored separately
     inline uint64_t size() const {
         return m_low_bits.size();
     }
 
+    // MODIFIED -> removed low bit info
     uint64_t num_bits() const {
-        return 8 * (m_high_bits.bytes() + m_high_bits_d1.bytes() + m_low_bits.bytes());
+        return 8 * (m_high_bits.bytes() + m_high_bits_d1.bytes());
     }
 
     template <typename Visitor>
@@ -93,13 +120,11 @@ struct ef_sequence{
     void save(std::ostream &os) {
         m_high_bits.save(os);
         m_high_bits_d1.save(os);
-        m_low_bits.save(os);
     }
 
     void load(std::istream &is){
         m_high_bits.load(is);
         m_high_bits_d1.load(is);
-        m_low_bits.load(is);
     }
 
     void save_fp(FILE* fp){

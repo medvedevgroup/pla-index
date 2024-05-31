@@ -9,6 +9,8 @@
 
 #include "essentials.hpp"
 
+using namespace std;
+
 namespace arank {
 
 struct compact_vector {
@@ -223,11 +225,161 @@ struct compact_vector {
         assert(i < size());
         uint64_t pos = i * m_width;
         uint64_t block = pos >> 6;
+        // __builtin_prefetch(m_bits.data()+block);
+        // __builtin_prefetch(m_bits.data()+block+1);
         uint64_t shift = pos & 63;
         return shift + m_width <= 64
                    ? m_bits[block] >> shift & m_mask
                    : (m_bits[block] >> shift) | (m_bits[block + 1] << (64 - shift) & m_mask);
     }
+
+    // get ((x[i], y[i]), (x[i-1], y[i-1]))
+    inline pair<pair<int64_t, uint64_t>, pair<int64_t, uint64_t> > get_x_pair(const int64_t &i) const{
+        uint64_t pos = i * m_width;
+        int64_t ratio = mdr * i;
+        // cout<<"mdr: "<<mdr<<endl;
+        uint64_t block = pos >> 6;
+        uint64_t shift = pos & 63;
+        uint64_t val1 = shift + m_width <= 64
+                   ? m_bits[block] >> shift & m_mask
+                   : (m_bits[block] >> shift) | (m_bits[block + 1] << (64 - shift) & m_mask);
+        // int64_t x_val1 = get_signed_value(val1 << ef_bits) + ratio;
+        // uint64_t ef_val1 = val1 & ef_mask;
+        
+        // int64_t x_val2 = 0; // these are dummy values; if i=0, first condition will be checked in query
+        // uint64_t ef_val2 = 0;
+        uint64_t val2;
+        if(i > 0){
+            pos -= m_width;
+            // ratio -= mdr;
+            block = pos >> 6;
+            shift = pos & 63;
+            val2 = shift + m_width <= 64
+                   ? m_bits[block] >> shift & m_mask
+                   : (m_bits[block] >> shift) | (m_bits[block + 1] << (64 - shift) & m_mask);
+            // x_val2 = get_signed_value(val2 << ef_bits) + ratio;
+            // ef_val2 = val2 & ef_mask;
+        }
+        return make_pair(make_pair(get_signed_value(val1 >> ef_bits) + ratio, val1 & ef_mask),
+                make_pair(get_signed_value(val2 >> ef_bits) + ratio - mdr, val2 & ef_mask) );
+    }
+
+    // get (prefix[i], prefix[i+1])
+    inline pair<int64_t, int64_t> get_ind_pair(const int64_t &i, uint64_t &indx_size) const{
+        uint64_t pos = i * m_width;
+        uint64_t block = pos >> 6;
+        uint64_t shift = pos & 63;
+        int64_t val1 = shift + m_width <= 64
+                   ? m_bits[block] >> shift & m_mask
+                   : (m_bits[block] >> shift) | (m_bits[block + 1] << (64 - shift) & m_mask);
+        int64_t val2 = indx_size;
+        if(i < size()-1){
+            pos += m_width;
+            block = pos >> 6;
+            shift = pos & 63;
+            val2 = shift + m_width <= 64
+                   ? m_bits[block] >> shift & m_mask
+                   : (m_bits[block] >> shift) | (m_bits[block + 1] << (64 - shift) & m_mask);
+        }
+        return make_pair(val1, val2-1);
+    }
+
+    inline int64_t get_signed_value(int64_t value) const{
+        return value & 1
+            ? -(value>>1)
+            : value>>1;
+    }
+
+    int64_t get_x_val(int64_t i) const{
+        return get_signed_value((*this)[i] >> ef_bits) + mdr*i;
+    }
+    
+    // returns ((x[i], ef_cv[i]), (x[i+1] - x[i], ef_cv[i+1])), also sets the brkpnt at parameter value
+    pair<pair<int64_t, uint64_t>, pair<int64_t, uint64_t> > binary_search(int64_t lo, int64_t hi, 
+                const int64_t kval, int64_t &brkpnt) const{
+        int64_t mid, ratio, prev_x_val = -1, x_val;
+        uint64_t pos, block, shift, value, prev_value;
+        // cout<<lo<<" "<<ef_bits<<" "<<hi<<endl;
+        // cout<<get_x_val(lo)<<" "<<kval<<" "<<get_x_val(hi)<<endl;
+        // int _count=0;
+        while(1){
+            if(hi-lo <= 64){
+                // cout<<lo<<" "<<ef_bits<<" "<<hi<<endl;
+                // cout<<get_x_val(lo)<<" "<<kval<<" "<<get_x_val(hi)<<endl;
+                ratio = mdr * hi;
+                pos = hi * m_width;
+                for (int64_t i = hi; i >= lo; i--)
+                {
+                    block = pos >> 6;
+                    shift = pos & 63;
+                    
+                    value = (shift + m_width <= 64) ?
+                        m_bits[block] >> shift & m_mask
+                    :   (m_bits[block] >> shift) | (m_bits[block + 1] << (64 - shift) & m_mask);
+                    
+                    x_val = get_signed_value(value >> ef_bits) + ratio;
+                    // cout<<i<<" "<<_count<<" "<<x_val<<" "<<kval<<endl;
+                    if(x_val <= kval){
+                        brkpnt = i;
+                        if(prev_x_val != -1){
+                            return make_pair(make_pair(x_val, value & ef_mask), 
+                                    make_pair(prev_x_val - x_val, prev_value & ef_mask));
+                        }
+                        else{
+                            ratio += mdr;
+                            pos += m_width;
+                            block = pos >> 6;
+                            shift = pos & 63;
+                            prev_value = (shift + m_width <= 64) ?
+                                    m_bits[block] >> shift & m_mask
+                                :   (m_bits[block] >> shift) | (m_bits[block + 1] << (64 - shift) & m_mask);
+                            prev_x_val = get_signed_value(prev_value >> ef_bits) + ratio;
+                            return make_pair(make_pair(x_val, value & ef_mask), 
+                                    make_pair(prev_x_val - x_val, prev_value & ef_mask));
+
+                        }
+                    }
+                    ratio -= mdr;
+                    prev_value = value;
+                    prev_x_val = x_val;
+                    pos -= m_width;
+                    // _count++;
+                    // if(_count > 64) break;
+                }
+                // cout<<_count<<endl;
+                // exit(1);
+                
+            } 
+            mid = (lo + hi) >> 1;
+            value = (*this)[mid];
+            x_val = get_signed_value(value >> ef_bits) + mdr*mid;
+            if (x_val == kval) {
+                brkpnt = mid;
+                uint64_t prev_value = (*this)[mid+1];
+                return make_pair(make_pair(x_val, value & ef_mask),  
+                        make_pair(get_signed_value(prev_value >> ef_bits)+ mdr * mid + mdr - x_val, prev_value & ef_mask));
+            }
+            else if(x_val > kval){ 
+                hi = mid;
+            }
+            else{ 
+                lo = mid;
+            }
+        }  
+    }
+
+
+    /**
+     * From pos value we get the ith bits position where the data is at
+     * Then, i>>3 -> gives the 64 bit alignment where the data is located
+     * For example width is 4, pos is 30, so data is at 120.
+     * So, so the 64 bit data retrieved will have value from [120, 123] bits
+     * ptr + i>>3  is char pointer operations, so ptr + 15 byte approach
+     * 15 *8 = 120
+     * so, that 
+     * but we dont need 124-127 bits
+     * 120 % 8 = 0
+    */
 
     // it retrieves at least 57 bits
     inline uint64_t access(uint64_t pos) const {
@@ -235,6 +387,28 @@ struct compact_vector {
         uint64_t i = pos * m_width;
         const char* ptr = reinterpret_cast<const char*>(m_bits.data());
         return (*(reinterpret_cast<uint64_t const*>(ptr + (i >> 3))) >> (i & 7)) & m_mask;
+    }
+
+    inline pair<uint64_t, uint64_t> get_two_consecutive_access(uint64_t pos) const{
+        uint64_t i = pos * m_width;
+        uint64_t j = i + m_width;
+        const char* ptr = reinterpret_cast<const char*>(m_bits.data());
+        return make_pair((*(reinterpret_cast<uint64_t const*>(ptr + (i >> 3))) >> (i & 7)) & m_mask,
+            (*(reinterpret_cast<uint64_t const*>(ptr + (j >> 3))) >> (j & 7)) & m_mask);
+    }
+
+    inline uint64_t get_prev_unmatched(int64_t &curr_val, uint64_t &idx){
+        uint64_t pos, block, shift, value;
+        pos = idx * m_width;
+        do{
+            block = pos >> 6;
+            shift = pos & 63;
+            value = (shift + m_width <= 64)
+                   ? m_bits[block] >> shift & m_mask
+                   : (m_bits[block] >> shift) | (m_bits[block + 1] << (64 - shift) & m_mask);
+            pos -= m_width;
+        }while(value == curr_val);
+        return value;        
     }
 
     uint64_t back() const {
@@ -314,6 +488,9 @@ struct compact_vector {
         essentials_arank::load_vec_fp(fp, m_bits);
         if(!err) std::cout<<"Read 0 bytes in compact vec: load_fp. should not happen\n";
     }
+
+    int64_t mdr;
+    uint64_t ef_bits, ef_mask;
 
 private:
     uint64_t m_size;

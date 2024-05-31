@@ -117,4 +117,26 @@ inline std::string trim_string(const std::string& str) {
     return str.substr(first, last - first + 1);
 }
 
+/** Extract contiguous bits from a 64-bit integer. */
+inline uint64_t bextr(uint64_t word, unsigned int offset, unsigned int length) {
+#ifdef __BMI__
+    return _bextr_u64(word, offset, length);
+#else
+    return (word >> offset) & sdsl::bits::lo_set[length];
+#endif
+}
+
+/** Reads the specified number of bits (must be < 58) from the given position. */
+/**
+ * The first vector element is ranged from 0 to 63 [from the LSB]
+ * Next one is 64 to 127 and so on
+ * Starting from bit offset, in total, 'length' number of bits will be extracted
+*/
+inline uint64_t readInt(const uint64_t *data, uint64_t bitOffset, uint8_t length) {
+    assert(length < 58);
+    auto ptr = reinterpret_cast<const char*>(data);
+    auto word = *(reinterpret_cast<const uint64_t *>(ptr + bitOffset / 8));
+    return bextr(word, bitOffset % 8, length);
+}
+
 }  // namespace arank::util

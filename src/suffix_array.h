@@ -81,6 +81,23 @@ public:
             return sa.GetValForIterator(*(it + index));
             // return *(it + index);
         }
+
+        int64_t rank_of_last_entry()const{
+            size_t indx = sa.size()-1;
+            int64_t val;
+            while(1){
+                val = sa[indx--];
+                if(val != -1) break;
+            }
+            int64_t temp;
+            while(1){
+                temp = sa[indx];
+                if(temp != val) return indx+1;
+                indx--;
+            }
+        }
+
+        inline int64_t get_kmer_size() const{return kmer_size;}
     };
 
     // Overloading the [] operator
@@ -167,7 +184,7 @@ public:
         char ch = ' ';
         while(1){
             // nLcp = min(loLcp, hiLcp);  
-            // cout<<lo<<" "<<mid<<" "<<hi<<endl;
+            // cout<<lo<<" "<<(lo+hi)/2<<" "<<hi<<endl;
             // std::cout<<GetKmerValAtSAIndx(lo)<<" "
             // <<GetKmerVal(s)<<" "
             // <<GetKmerValAtSAIndx(hi)<<endl;
@@ -221,7 +238,7 @@ public:
     }
 
     std::string GetKmerAtStrPos(size_t strPos){
-        if(strPos + kmer_size >= str.size()){
+        if(strPos + kmer_size > str.size()){
             // cout<<strPos<<" " <<saq.str.size()<<endl;
             return "-1";
         }

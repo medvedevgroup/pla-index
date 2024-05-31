@@ -367,7 +367,10 @@ public:
         double knot_ei = int64_t(rectangle[1].y)+
                     (uint64_t(max_slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
                     /(double)max_slope.dx);
-        return ((floor(knot_si-0.5)== floor(knot_si))&& (floor(knot_ei - 0.5)==floor(knot_ei)));
+        double frac_slope = double(max_slope.dy)/double(max_slope.dx);
+        bool is_frac_slope_half = (frac_slope - floor(frac_slope)) == 0.5;
+        return is_frac_slope_half
+            || ((floor(knot_si-0.5)== floor(knot_si))&& (floor(knot_ei - 0.5)==floor(knot_ei)));
     }
 
     int64_t Pred_idx(int64_t brk_beg_sa_indx, int64_t brk_end_sa_indx,
