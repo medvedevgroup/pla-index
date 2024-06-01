@@ -1,36 +1,23 @@
-# Read Aligner Application
-To use the read aligner application, run the following command:
-```shell
-git checkout strobealign-application
-```
+# Requirements
 
-# Exact Version
-To use `PLA-index-exact` version, check out to the `pla-index-exact` branch, and follow the `README` instructions there.
-```shell
-git checkout pla-index-exact
-```
+In addition to the requirements already stated, one will also need the followings:
 
-# Reproducibility Information
-`Refseq_dataset.csv` file contains the RefSeq IDs, Kingdom, alpha and beta values of `Table 5` from our paper. 
-`RefseqID_7Genomes.pdf` contains the RefSeq IDs of the genomes from `Table 6`.
-`RefSeq_ID_List.txt` contains the RefSeq IDs of the 549 genomes that were used for analyzing the pla-complexity.
+- [Snakemake](https://snakemake.readthedocs.io/en/stable/) (for automating all computations)
 
 `Snakemake` pipeline can be used to generate the results shown in our paper.
 To do this, run `cmake` as before, as this will genereate the necessary executables to process the data corresponding to the `Snakemake` input.
 
-# Requirements
-In addition to the requirements already stated, one will also need the followings:
-- [Snakemake](https://snakemake.readthedocs.io/en/stable/) (for automating all computations)
-- R (for finding the alpha and beta value (from pla-complexity) from segments vs eps curve fitting)
-
 ## Auxilary Files
-To build and query pla-index, we need the whole genome 'N' filtered and concatenated, the binary suffix array file and the query files as before. 
+
+To build and query pla-index, we need the whole genome 'N' filtered and concatenated, the binary suffix array file and the query files as before.
 To produce these files, the executables files inside the `pla-index/build` folder can be used.
 
 To filter 'N' from a genome and concatenate the genome to a string:
-```
+
+```shell
 ./process_fasta FASTA-FILE OUTPUT-PREFIX
 ```
+
 Parameter description:
 
 | Parameter Name | Description |
@@ -42,9 +29,10 @@ The output fasta will have a single header line and a single string containing a
 
 To construct suffix array on the concatenated genome:
 
-```
+```shell
 ./mksary PROCESSED-GENOME-FASTA SUFFIX-ARRAY-FILE
 ```
+
 Parameter description:
 | Parameter Name | Description |
 |----------|----------|
@@ -54,7 +42,8 @@ Parameter description:
 We use the suffix array format of `mksary` executable output. This is basically a binary file of the suffix array (each index value being a 64 bit integer).
 
 To construct query files:
-```
+
+```shell
 ./create_queries PROCESSED-GENOME-FILE SUFFIX-ARRAY-FILE PREFIX KMER-SIZE NO-OF-QUERIES NO-OF-FILES
 ```
 
@@ -71,27 +60,34 @@ Parameter description:
 | NO-OF-FILES | How many query files to construct |
 
 Thus, for example, if we have an `ecoli.fasta` file, we can remove 'N' and concatenate the genome by:
+
 ```shell
 ./process_fasta ecoli.fasta ecoli
 ```
+
 The output file is written at `ecoli.processed.fasta`
 
 Next, we can build the suffix array of this genome by:
+
 ```shell
 ./mksary ecoli.processed.fasta ecoli.sa.bin
 ```
+
 The output suffix array is written at `ecoli.sa.bin`
 
 Next, we can create one query file of 5,000,000 queries of 21 size k-mer for this genome by:
+
 ```shell
 ./create_queries ecoli.processed.fasta ecoli.sa.bin ecoli 21 5000000 1
 ```
+
 The output query file is written at `ecoli.1.query.txt`
 
 ## Snakemake
 
 To automate the index building and querying using snakemake, create a folder containing the genome fasta file, binary file of the suffix array and query files.
 The snakemake file assumes the following naming conventions:
+
 - Genome folder name without any white-spaces(example: GENOME)
 - Fasta file with one entry and only ACGT characters inside the genome folder needs to be named as GENOME/GENOME.processed.fasta
 - Binary suffix array file (64 bit integers as suffix array values) inside the genome folder as GENOME/GENOME.sa.bin
@@ -99,15 +95,18 @@ The snakemake file assumes the following naming conventions:
 
 Thus, if one have a fasta file at hand, output from `process_fasta`, `mksary` and `create_queries` (all are inside the `build` folder) can be used to format the files necessary for `snakemake`.
 
-For example, let the genome folder name be `ecoli`. 
+For example, let the genome folder name be `ecoli`.
 Then, we will have three files inside `ecoli` folder: `ecoli/ecoli.processed.fasta`, `ecoli/ecoli.sa.bin`, and `ecoli/ecoli.1.query.txt` (`1` being the tag number of the query)
 
 Then, create a config file using CreateConfigFile.py. To see the config options:
+
 ```shell
 python3 CreateConfigFile.py -h
 ```
+
 Config options:
-```
+
+```text
 usage: CreateConfigFile.py [-h] --genome_folder GENOME_FOLDER --epsilon EPSILON [--index_type INDEX_TYPE]
                            [--fast_rank FAST_RANK] [--query_type QUERY_TYPE] [--kmer_size KMER_SIZE]
                            [--code_path CODE_PATH] [--exec_path EXEC_PATH] [--l_bits L_BITS] [--query_tag QUERY_TAG]
@@ -136,7 +135,8 @@ options:
                         Path where the source code is (default: ../src/)
   --exec_path EXEC_PATH
                         Path where the executables will be stored (default: ../executables/)
-  --l_bits L_BITS       How many elements to store in the shortcut array, D. |D| = 2^l (default: 16)
+  --lookup LOOKUP       On average on how many elements the binary search on X array will take place. Used to
+                        determine the prefix lookup table. (default: 16)
   --query_tag QUERY_TAG
                         QUERY_TAG to identify which query file to use from GENOME.QUERY_TAG.query.txt (default: 1)
   --sdsl_lib_path SDSL_LIB_PATH
@@ -147,16 +147,25 @@ options:
 
 Here is an example using the `ecoli` folder inside the `tests` folder:
 
-```
+```shell
 cd tests
 mkdir -p ../executables
 python3 ../CreateConfigFile.py --genome_folder ecoli --epsilon 15
 snakemake -s ../Snakefile --cores=1 -p
 ```
 
-## Fitting Segments
+## Read Aligner Application
 
-To find the fitted degree (alpha) and fitted constant (beta) values, `fit_segments.R` can be used.
-First, the epsilon values vs number of segments needs to be listed in a text file. (one such example is `tests/Gorilla.segments.txt`).
-Then, list this file path and the genome length (each at a different line) in `fit_segment_file.txt`. (similar to `Reproducibility/fit_segment_file.txt`).
-Then, running `fit_segments.R` will output the goodness of fits as well as the alpha and beta values.
+To use the read aligner application, run the following command:
+
+```shell
+git checkout strobealign-application
+```
+
+## Exact Version
+
+To use `PLA-index-exact` version, check out to the `pla-index-exact` branch, and follow the `README` instructions there.
+
+```shell
+git checkout pla-index-exact
+```

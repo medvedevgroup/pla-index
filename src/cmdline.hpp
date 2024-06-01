@@ -15,7 +15,7 @@ struct CommandLineOptions {
     int64_t kmer_size {21};
     int64_t eps {15};
     std::string indx_fn {"-1"};
-    int64_t lookup_count {32};
+    int64_t lookup_count {16};
     std::string indx_type {"basic-pla"};
     bool is_fast_rank {false};
     std::string query_type {"search"};

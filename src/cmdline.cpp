@@ -22,7 +22,7 @@ CommandLineOptions parse_command_line_arguments_build(int argc, char **argv) {
     args::ValueFlag<int64_t> kmer_size(parser, "INT", "Kmer size to be used to construct the index. [default: 21]", {'k', "kmer_size"});
     args::ValueFlag<int64_t> eps(parser, "INT", "Epsilon value to be used for constructing the pla-index. [default: 15]", {'e', "eps"});
     args::ValueFlag<std::string>index_name(parser, "STRING", "File name where to save the index. [default: genome_fasta.index]", {'o', "index"});
-    args::ValueFlag<int64_t> lookup_count(parser, "INT", "On average on how many elements the binary search on X array will take place. Used to determine the prefix lookup table. [default: 32]", {'l', "lookup"});
+    args::ValueFlag<int64_t> lookup_count(parser, "INT", "On average on how many elements the binary search on X array will take place. Used to determine the prefix lookup table. [default: 16]", {'l', "lookup"});
     args::Flag enable_fast_rank(parser, "FLAG", "Construct an extra bitvector with the same length as the suffix array. Use this to speed up rank queries. [default: disabled]", {'r'});
         
     try {
