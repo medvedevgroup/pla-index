@@ -144,7 +144,7 @@ cd build/
 
 The built suffix array is written on `tests/ecoli/ecoli.sa.bin`.
 
-To build a `basic-pla` index with `21` size k-mer, default epsilon value (15), default average number of elements (16) on which the binary search on X array will take place per query and not creating a bit vector for faster rank query afterwards, we will use the formatted fasta file and the built suffix array:
+To build a `basic-pla` index with `21` size k-mer, default epsilon value (`15`), default average number of elements (`16`) on which the binary search on X array will take place per query and not creating a bit vector for faster rank query afterwards, we will use the formatted fasta file and the built suffix array:
 
 ```shell
 ./build_pla_index -g ../tests/ecoli/ecoli.processed.fasta -s ../tests/ecoli/ecoli.sa.bin -o ../tests/ecoli/ecoli.index
