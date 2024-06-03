@@ -9,6 +9,8 @@
 
 #include "essentials.hpp"
 
+using namespace std;
+
 namespace arank {
 
 struct compact_vector {
@@ -223,10 +225,75 @@ struct compact_vector {
         assert(i < size());
         uint64_t pos = i * m_width;
         uint64_t block = pos >> 6;
+        // __builtin_prefetch(m_bits.data()+block);
+        // __builtin_prefetch(m_bits.data()+block+1);
         uint64_t shift = pos & 63;
         return shift + m_width <= 64
                    ? m_bits[block] >> shift & m_mask
                    : (m_bits[block] >> shift) | (m_bits[block + 1] << (64 - shift) & m_mask);
+    }
+
+    inline pair<int64_t, int64_t> get_xy(const int64_t &i, const int64_t &mdr, 
+            const uint64_t &diff_bits, 
+            const uint64_t &diff_mask) const{
+        uint64_t value = (*this)[i];
+        return make_pair(get_signed_value(value >> diff_bits) + mdr*i, value & diff_mask);
+    }
+
+    inline int64_t get_signed_value(int64_t value) const{
+        return value & 1
+            ? -(value>>1)
+            : value>>1;
+    }
+    
+    pair<pair<int64_t, int64_t>, pair<int64_t, int64_t> > binary_search(int64_t lo, int64_t hi, const int64_t kval, 
+            const int64_t mdr, const uint64_t diff_bits, const uint64_t diff_mask) const{
+        int64_t mid, ratio, x_val, prev_x_val;
+        uint64_t pos, block, shift, value, prev_val;
+        bool flag = false;
+        while(1){
+            if(hi-lo <= 64){
+                ratio = mdr * hi;
+                pos = hi * m_width;
+                for (int64_t i = hi; i >= lo; i--)
+                {
+                    block = pos >> 6;
+                    shift = pos & 63;
+                    
+                    value = (shift + m_width <= 64) ?
+                        m_bits[block] >> shift & m_mask
+                    :   (m_bits[block] >> shift) | (m_bits[block + 1] << (64 - shift) & m_mask);
+
+                    x_val = get_signed_value(value >> diff_bits) + ratio;
+            
+                    if(x_val <= kval){
+                        return flag ?
+                            make_pair(make_pair(x_val, prev_x_val - x_val), make_pair(int64_t(value) & diff_mask, i))
+                        :   make_pair(make_pair(x_val, get_signed_value((*this)[i+1] >> diff_bits) + ratio + mdr - x_val), 
+                                    make_pair(int64_t(value) & diff_mask, i));
+                    }
+                    ratio -= mdr;
+                    prev_val = value;
+                    prev_x_val = x_val;
+                    pos -= m_width;
+                    flag = true;
+                }
+            } 
+            mid = (lo + hi) >> 1;
+            value = (*this)[mid];
+            x_val = get_signed_value(value >> diff_bits) + mdr*mid;
+            if (x_val == kval) {
+                return make_pair(make_pair(x_val,  
+                        get_signed_value((*this)[mid+1] >> diff_bits) + mdr * mid + mdr - x_val), 
+                                make_pair(int64_t(value) & diff_mask,mid));
+            }
+            else if(x_val > kval){ 
+                hi = mid;
+            }
+            else{ 
+                lo = mid;
+            }
+        }  
     }
 
     // it retrieves at least 57 bits
@@ -235,6 +302,14 @@ struct compact_vector {
         uint64_t i = pos * m_width;
         const char* ptr = reinterpret_cast<const char*>(m_bits.data());
         return (*(reinterpret_cast<uint64_t const*>(ptr + (i >> 3))) >> (i & 7)) & m_mask;
+    }
+
+    inline pair<uint64_t, uint64_t> get_two_consecutive_access(uint64_t pos) const{
+        uint64_t i = pos * m_width;
+        uint64_t j = i + m_width;
+        const char* ptr = reinterpret_cast<const char*>(m_bits.data());
+        return make_pair((*(reinterpret_cast<uint64_t const*>(ptr + (i >> 3))) >> (i & 7)) & m_mask,
+            (*(reinterpret_cast<uint64_t const*>(ptr + (j >> 3))) >> (j & 7)) & m_mask);
     }
 
     uint64_t back() const {

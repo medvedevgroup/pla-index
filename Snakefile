@@ -17,7 +17,7 @@ rule build:
         codePath = config["CodePath"],
         execPath = config["ExecPath"],
         flags = config["Compile_Flag"],
-        lp_bits = config["LP_Bits"],
+        Lookup = config["Lookup"],
         epsilon = config["Eps"],
         
         sdsl_include_path = config["SDSL_Inc"],
@@ -26,14 +26,14 @@ rule build:
         index_fn = "{fn}/{fn}.index"
     shell:
         "g++ -std=c++17 {params.flags} -I {params.sdsl_include_path} -L {params.sdsl_lib_path} {params.codePath}/build_pla_index.cpp "
-        "{params.codePath}/BitPacking.cpp {params.codePath}/pla_index.cpp "
+        " {params.codePath}/pla_index.cpp "
         "{params.codePath}/cmdline.cpp "
         "-o {params.execPath}/build_pla_index "
         "-lsdsl -ldivsufsort -ldivsufsort64;"
         # "/usr/bin/time -f \"%M,%e,%U,%S\" --output-file=memkb_sec_Usec_Ksec_dict_build.txt "
         "{params.execPath}/build_pla_index -g {input.genomeF} -s {input.saF} "
         "-k {params.kmer_size} -e {params.epsilon} "
-        "-o {output.index_fn} -l {params.lp_bits} "
+        "-o {output.index_fn} -l {params.Lookup} "
         # "-t {params.indx_type} {params.is_fast_rank_enabled} "
 
 rule query:
@@ -53,11 +53,11 @@ rule query:
         runInfo = "{fn}/{fn}.query_time.txt"
     shell:
         "g++ -std=c++17 {params.flags} -I {params.sdsl_include_path} -L {params.sdsl_lib_path} {params.codePath}/query_pla_index.cpp "
-        "{params.codePath}/BitPacking.cpp {params.codePath}/pla_index.cpp "
+        " {params.codePath}/pla_index.cpp "
         "{params.codePath}/cmdline.cpp "
         "-o {params.execPath}/query_pla_index "
         "-lsdsl -ldivsufsort -ldivsufsort64;"
-        # "/usr/bin/time -f \"%M,%e,%U,%S\" --output-file=memkb_sec_Usec_Ksec_query.txt "
+        
         "{params.execPath}/query_pla_index -g {input.genomeF} -s {input.saF} -q {input.query_file} "
         "-i {input.index_fn} --run_info {output.runInfo} "
-        # "--query_type {params.query_type} "
+        

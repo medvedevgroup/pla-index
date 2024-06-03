@@ -2,13 +2,7 @@
 * Suffix array random queries
 */
 
-#include <vector>
-#include <string>
-#include <iostream>
-#include <fstream>
-#include <random>
-#include <algorithm>
-#include "utils/util.hpp"
+#include <bits/stdc++.h>
 using namespace std;
 
 vector<char> str;
@@ -42,8 +36,8 @@ string GetKmerAtStringPos(int64_t idx, int64_t kmer_size){
     return query;
 }
 
-void WriteQueryKmers(int32_t nQueries, string fn_suff,
-        int kmer_size, int nFiles)
+void WriteQueryKmers_weighted(int32_t nQueries, string fn_suff,
+        int kmer_size)
 {
     int64_t idx;
     vector<string> query_kmers;
@@ -55,19 +49,94 @@ void WriteQueryKmers(int32_t nQueries, string fn_suff,
     
     cout<<"Writing start..\n";
 
-    for(int64_t n=1; n<=nFiles; n++){
-        ofstream queryFile(fn_suff+"."+ to_string(n)+".query.txt");
-        for(int i=0; i<query_kmers.size(); i++){
-            // queryFile<<"@read"<<(i+1)<<endl;
-            queryFile<<query_kmers[i]<<endl;
-            // queryFile<<"+"<<endl;
-            // queryFile<<"999999999999999999999"<<endl;
-        }
-        queryFile.close();
-
-        random_shuffle(query_kmers.begin(), query_kmers.end());
+    ofstream queryFile("1_QueryKmers_"+fn_suff+".txt");
+    for(int i=0; i<query_kmers.size(); i++){
+        
+            // queryKmers.push_back(uniq_kmers[i]);
+        queryFile<<"@read"<<(i+1)<<endl;
+        queryFile<<query_kmers[i]<<endl;
+        queryFile<<"+"<<endl;
+        queryFile<<"999999999999999999999"<<endl;
     }
-    
+    queryFile.close();
+
+    random_shuffle(query_kmers.begin(), query_kmers.end());
+    ofstream queryFile2("2_QueryKmers_"+fn_suff+".txt");
+    for(int i=0; i<query_kmers.size(); i++){
+        
+            // queryKmers.push_back(uniq_kmers[i]);
+        queryFile2<<"@read"<<(i+1)<<endl;
+        queryFile2<<query_kmers[i]<<endl;
+        queryFile2<<"+"<<endl;
+        queryFile2<<"999999999999999999999"<<endl;
+    }
+    queryFile2.close();
+
+    random_shuffle(query_kmers.begin(), query_kmers.end());
+    ofstream queryFile3("3_QueryKmers_"+fn_suff+".txt");
+    for(int i=0; i<query_kmers.size(); i++){
+        
+            // queryKmers.push_back(uniq_kmers[i]);
+        queryFile3<<"@read"<<(i+1)<<endl;
+        queryFile3<<query_kmers[i]<<endl;
+        queryFile3<<"+"<<endl;
+        queryFile3<<"999999999999999999999"<<endl;
+    }
+    queryFile3.close();
+}        
+
+void WriteQueryKmers_unique(int32_t nQueries, string fn_suff,
+        int kmer_size)
+{
+    vector<string> uniq_kmers;
+    vector<string> query_kmers;
+    FindUniqueKmers(uniq_kmers, kmer_size);
+    // vector<uint64_t> kmerIndices(uniq_kmers.size(), 0);
+    // iota(kmerIndices.begin(), kmerIndices.end(), 0);
+    random_shuffle(uniq_kmers.begin(), uniq_kmers.end());
+    // vector <uint64_t> queryIndices(kmerIndices.begin(),kmerIndices.begin() + nQueries);
+    // sort(queryIndices.begin(), queryIndices.end());
+
+    vector<string> queryKmers;
+    int32_t indx = 0;
+
+    cout<<"Writing start..\n";
+
+    ofstream queryFile("1_QueryKmers_"+fn_suff+".txt");
+    cout<<"#Unique kmers: "<<uniq_kmers.size()<<endl;
+    for(int i=0; i<uniq_kmers.size(); i++){
+        
+            // queryKmers.push_back(uniq_kmers[i]);
+        queryFile<<"@read"<<(indx+1)<<endl;
+        queryFile<<uniq_kmers[i]<<endl;
+        queryFile<<"+"<<endl;
+        queryFile<<"999999999999999999999"<<endl;
+        indx++;
+        query_kmers.push_back(uniq_kmers[i]);
+        if(indx == nQueries) break;
+    }
+    cout<<"Total number of queries: "<<indx<<endl;
+    queryFile.close();
+
+    random_shuffle(query_kmers.begin(), query_kmers.end());
+    ofstream queryFile2("2_QueryKmers_"+fn_suff+".txt");
+    for(int i=0; i<query_kmers.size(); i++){
+        queryFile2<<"@read"<<(indx+1)<<endl;
+        queryFile2<<query_kmers[i]<<endl;
+        queryFile2<<"+"<<endl;
+        queryFile2<<"999999999999999999999"<<endl;
+    }
+    queryFile2.close();
+
+    random_shuffle(query_kmers.begin(), query_kmers.end());
+    ofstream queryFile3("3_QueryKmers_"+fn_suff+".txt");
+    for(int i=0; i<query_kmers.size(); i++){
+        queryFile3<<"@read"<<(indx+1)<<endl;
+        queryFile3<<query_kmers[i]<<endl;
+        queryFile3<<"+"<<endl;
+        queryFile3<<"999999999999999999999"<<endl;
+    }
+    queryFile3.close();
 }
 
 void LoadSA(string sa_file){
@@ -78,16 +147,11 @@ void LoadSA(string sa_file){
 }
 
 void LoadGenomeString(string genomeFile){
-    str.reserve(fSize);
-    string line;
-    ifstream in_file(genomeFile.c_str());
-    // skipping header
-    getline(in_file, line);
-    while(getline(in_file, line)){
-        line = arank::util::trim_string(line);
-        std::copy(line.begin(), line.end(), std::back_inserter(str));
-    }
-    fSize = str.size();
+    str.resize(fSize);
+    FILE *fp = fopen(genomeFile.c_str(), "rb");
+    //Last character is not handled -> should be $ or \0?
+    size_t err = fread(&str[0], 1, fSize, fp);
+    fclose(fp);
 }
 
 std::ifstream::pos_type filesize(const char* filename)
@@ -103,11 +167,13 @@ int main(int argc, char **argv){
     string fn_suffix = argv[3];
     int kmer_size = stoi(argv[4]);
     int32_t nQueries = stoi(argv[5]);
-    int64_t nFiles = stoi(argv[6]);
     fSize = filesize(genomeFile.c_str());
+    printf("File size: %ld\n",fSize);
     LoadGenomeString(genomeFile);
-    LoadSA(sa_file);    
-    WriteQueryKmers(nQueries,fn_suffix, kmer_size, nFiles);
-    cout<<nFiles<<" Query File(s) Created"<<endl;
+    LoadSA(sa_file);
+    cout<<"SA: "<<sa.size()<<endl;
+
+    WriteQueryKmers_weighted(nQueries,fn_suffix, kmer_size);
+    cout<<"Query done"<<endl;
     return 0;
 }

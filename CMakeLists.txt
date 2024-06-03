@@ -1,14 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(pla-index VERSION 1.0)
+project(pla-index VERSION 1.1)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_FLAGS  "-Ofast -mbmi2 -msse4.2 -DNDEBUG -march=native -pthread")
+set(CMAKE_CXX_FLAGS  "-O3 -mbmi2 -msse4.2 -DNDEBUG -march=native -pthread")
 
 add_library(pla STATIC 
-  src/BitPacking.cpp
   src/pla_index.cpp
   src/cmdline.cpp
 )

@@ -113,8 +113,10 @@ public:
     }
 
     const int64_t get_largest() const{
-        uint64_t last_idx = fSize-1;
-        while(GetKmerValAtSAIndx(last_idx) == -1) last_idx--;
+        int64_t last_idx = fSize-1;
+        while(GetKmerValAtSAIndx(last_idx) == -1) {
+            last_idx--;
+        }
         return GetKmerValAtSAIndx(last_idx);
     }
 
@@ -167,7 +169,7 @@ public:
         char ch = ' ';
         while(1){
             // nLcp = min(loLcp, hiLcp);  
-            // cout<<lo<<" "<<mid<<" "<<hi<<endl;
+            // cout<<lo<<" "<<(lo+hi)/2<<" "<<hi<<endl;
             // std::cout<<GetKmerValAtSAIndx(lo)<<" "
             // <<GetKmerVal(s)<<" "
             // <<GetKmerValAtSAIndx(hi)<<endl;

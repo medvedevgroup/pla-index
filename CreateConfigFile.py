@@ -1,13 +1,12 @@
 import argparse
 
-# flag: -Ofast -mbmi2 -msse4.2 -DNDEBUG -march=native -I ~/include -L ~/lib 
 def CreateConfig(f, args, flags):
     f.write('---\n')
     f.write('CodePath: \"'+args.code_path+'\"\n')
     f.write('ExecPath: \"'+args.exec_path+'\"\n')
     f.write('Kmer_Size: \"'+str(args.kmer_size)+'\"\n')
     
-    f.write('LP_Bits: \"'+str(args.l_bits)+'\"\n')
+    f.write('Lookup: \"'+str(args.lookup)+'\"\n')
     f.write('Query_Tag: \"'+str(args.query_tag)+'\"\n')
     f.write('Eps: \"'+str(args.epsilon)+'\"\n')
     f.write('SDSL_Inc: \"'+args.sdsl_inc_path+'\"\n')
@@ -28,7 +27,7 @@ def main():
     parser.add_argument('--kmer_size', type=int, default=21, help="Kmer size for which pla-index will be calculated (default: 21)")
     parser.add_argument('--code_path', type=str, default="../src/", help="Path where the source code is (default: ../src/)")
     parser.add_argument('--exec_path', type=str, default="../executables/", help="Path where the executables will be stored (default: ../executables/)")  
-    parser.add_argument('--l_bits', type=int, default=16, help=" How many elements to store in the shortcut array, D. |D| = 2^l (default: 16)")
+    parser.add_argument('--lookup', type=int, default=16, help="On average on how many elements the binary search on X array will take place. Used to determine the prefix lookup table. (default: 16)")
     parser.add_argument('--query_tag', type=int, default=1, help="QUERY_TAG to identify which query file to use from GENOME.QUERY_TAG.query.txt (default: 1)")    
     
     parser.add_argument('--sdsl_lib_path', type=str, default='~/lib', help="Path to the SDSL library folder (default: ~/lib)")
@@ -36,7 +35,7 @@ def main():
 
     args = parser.parse_args()
     
-    flags = "-Ofast -mbmi2 -msse4.2 -DNDEBUG -march=native -pthread"
+    flags = "-O3 -mbmi2 -msse4.2 -DNDEBUG -march=native -pthread"
     
     with open('config.yaml', 'w') as f:
         CreateConfig(f, args, flags)

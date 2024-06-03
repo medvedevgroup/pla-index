@@ -18,13 +18,11 @@ CommandLineOptions parse_command_line_arguments_build(int argc, char **argv) {
     // build_index
     args::ValueFlag<std::string>genome_fasta(parser, "STRING", "Fasta file with one entry and only ACGT characters. [Required]", {'g', "genome_fasta"},args::Options::Required);
     args::ValueFlag<std::string>suffix_array(parser, "STRING", "Suffix array of the genome in a binary file. [Required]", {'s', "suffix_array"},args::Options::Required);
-    // args::ValueFlag<std::string>index_type(parser, "STRING", "Whether to build \"basic-pla\" or \"repeat-pla\" index. \"repeat-pla\" is generally the better option but can slow down rank queries unless the -r option is also used. [default: basic-pla]", {'t', "index_type"});
     args::ValueFlag<int64_t> kmer_size(parser, "INT", "Kmer size to be used to construct the index. [default: 21]", {'k', "kmer_size"});
     args::ValueFlag<int64_t> eps(parser, "INT", "Epsilon value to be used for constructing the pla-index. [default: 15]", {'e', "eps"});
     args::ValueFlag<std::string>index_name(parser, "STRING", "File name where to save the index. [default: genome_fasta.index]", {'o', "index"});
-    args::ValueFlag<int64_t> l_val(parser, "INT", "To determine the size of the shortcut array, D. |D| = 2^l. [default: 16]", {'l', "l_val"});
-    // args::Flag enable_fast_rank(parser, "FLAG", "Construct an extra bitvector with the same length as the suffix array. Use this to speed up rank queries. [default: disabled]", {'r'});
-        
+    args::ValueFlag<int64_t> lookup_count(parser, "INT", "On average on how many elements the binary search on X array will take place. Used to determine the prefix lookup table. [default: 16]", {'l', "lookup"});
+    
     try {
         parser.ParseCLI(argc, argv);
     }
@@ -49,9 +47,8 @@ CommandLineOptions parse_command_line_arguments_build(int argc, char **argv) {
     if(kmer_size) {opt.kmer_size = args::get(kmer_size);}
     if(eps) {opt.eps = args::get(eps);}
     if(index_name) {opt.indx_fn = args::get(index_name);}
-    if(l_val) {opt.lp_bits = args::get(l_val);}
-    // if(index_type) {opt.indx_type = args::get(index_type);}
-    // if(enable_fast_rank) {opt.is_fast_rank = true;}
+    if(lookup_count) {opt.lookup_count = args::get(lookup_count);}
+    
 
     if(opt.indx_fn == "-1"){
         opt.indx_fn = opt.gn_fn+".index";
@@ -76,7 +73,6 @@ CommandLineOptions parse_command_line_arguments_query(int argc, char **argv) {
     args::ValueFlag<std::string>suffix_array(parser, "STRING", "Suffix array of the genome in a binary file [Required]", {'s', "suffix_array"},args::Options::Required);
     args::ValueFlag<std::string>index_name(parser, "STRING", "Name of the stored index file [Required]", {'i', "index"},args::Options::Required);
     args::ValueFlag<std::string>query_file(parser, "STRING", "Name of a text file containing queries. Each line of the file should contain a single k-mer. The length of the kmer should be the same as the one provided while building the index. [Required]", {'q', "query"},args::Options::Required);
-    // args::ValueFlag<std::string>query_type(parser, "STRING", "Whether to do \"search\" or \"rank\" query. \"rank\" gives you the value of the first position in the suffix array where the query is found. \"search\" on the other hand, also returns the value where the query appears, but it might not be the very first spot.  [default: search]", {"query_type"});
     args::ValueFlag<std::string>run_info(parser, "STRING", "File name to store query times", {"run_info"}, args::Options::Hidden);
         
 
@@ -104,7 +100,7 @@ CommandLineOptions parse_command_line_arguments_query(int argc, char **argv) {
     if(index_name) {opt.indx_fn = args::get(index_name);}
 
     if(query_file) {opt.query_file = args::get(query_file);}
-    // if(query_type) {opt.query_type = args::get(query_type);}
+    
     if(run_info) {opt.run_info_fn = args::get(run_info);}
 
     return opt;
