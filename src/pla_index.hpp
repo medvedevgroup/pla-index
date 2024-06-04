@@ -105,6 +105,8 @@ public:
     void encode_values_basic(const vector<uint64_t> &brk_kval_vec, 
         const vector<uint64_t> &brk_diff_vec, int64_t lookup_count){
         
+        if(lookup_count > index_size) lookup_count = 1;
+
         // lp bits taken input as lookup count
         lp_bits = ceil(log2((brk_kval_vec.size()/lookup_count)));
         uint64_t max_bits = shift_bits;
@@ -210,10 +212,12 @@ public:
     
     void encode_values_repeat(const vector<uint64_t> &brk_kval_vec, 
             sdsl::dac_vector_dp<> &sa_diff_dac_vec,
-            const int64_t lookup_count){
+            int64_t lookup_count){
         vector<uint64_t> prefix_lookup_vec, level_counter;
         sdsl::bit_vector dac_bv(index_size);
         
+        if(lookup_count > index_size) lookup_count = 1;
+
         lp_bits = ceil(log2(index_size/lookup_count));
         shift_bits -= lp_bits;
         
