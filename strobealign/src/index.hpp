@@ -38,12 +38,13 @@ struct IndexCreationStatistics {
 
 struct StrobemerIndex {
     using bucket_index_t = uint64_t;
-    StrobemerIndex(const References& references, const IndexParameters& parameters, int bits=-1, int eps=15)
+    StrobemerIndex(const References& references, const IndexParameters& parameters, 
+        int bits=-1, int eps=15)
         : filter_cutoff(0)
         , parameters(parameters)
         , references(references)
         , bits(bits == -1 ? pick_bits(references.total_length()) : bits)  
-        , rs_pla_index(eps, 16)
+, rs_pla_index(eps)
     {
         if (this->bits < 8 || this->bits > 31) {
             throw BadParameter("Bits must be between 8 and 31");

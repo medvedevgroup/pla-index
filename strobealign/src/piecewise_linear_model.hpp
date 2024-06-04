@@ -30,6 +30,10 @@ inline omp_int_t omp_get_max_threads() { return 1; }
 #include <stdexcept>
 #include <type_traits>
 
+#define DEBUG_PRINT_PLA 0
+#define DEBUG_PRINT_FIRST 1
+
+
 template<typename T>
 using LargeSigned = typename std::conditional_t<std::is_floating_point_v<T>,
                                                 long double,
@@ -113,8 +117,6 @@ private:
     auto cross(const Point &O, const Point &A, const Point &B) const {
         auto OA = A - O;
         auto OB = B - O;
-        // std::cout<<OA.dx <<" "<< OB.dy<<" "<<OA.dy <<" "<< OB.dx<<std::endl;
-        // std::cout<<OA.dx * OB.dy<<" "<<OA.dy * OB.dx<<std::endl;
         return (OA.dx * OB.dy) - (OA.dy * OB.dx);
     }
 
@@ -136,21 +138,13 @@ public:
 
     bool add_point(const X &x, const Y &y,  const Y &occurenceCount) {
         if (points_in_hull > 0 && x <= last_x){
-            // std::std::cout<<x<< " "<<last_x<<std::endl;
             throw std::logic_error("Points must be increasing by x.: "
                 +std::to_string(uint64_t(x))+" "+std::to_string(uint64_t(last_x)));
         }
-            
 
-        // occurenceCount = (int64_t)1;
-        // std::cout<<"curr point: "<<x<<std::endl;
-        
         Point p1{x, SY(y) + epsilon + occurenceCount -1};
         Point p2{x, int64_t(y) - epsilon};
-        // if(x >= 2188 && x<= 2334){
-        //     std::cout<<"["<<(int64_t)SY(y) + epsilon + occurenceCount -1<<", ";
-        //     std::cout<<(int64_t)SY(y) - epsilon<<"]"<<std::endl;
-        // }
+        
         if (points_in_hull == 0) {
             first_x = x;
             rectangle[0] = p1;
@@ -188,7 +182,7 @@ public:
         bool outside_line2 = p2 - rectangle[3] > slope2;
 
         if (outside_line1 || outside_line2) {
-            points_in_hull = 0;
+            // points_in_hull = 0;
             return false;
         }
         last_x = x;
@@ -245,8 +239,8 @@ public:
 
     CanonicalSegment get_segment() const {
         if (points_in_hull == 1)
-            return CanonicalSegment(rectangle[0], rectangle[1], first_x, last_x);
-        return CanonicalSegment(rectangle, first_x, last_x);
+            return CanonicalSegment(rectangle[0], rectangle[1], first_x, last_x, points_in_hull);
+        return CanonicalSegment(rectangle, first_x, last_x, points_in_hull);
     }
 
     void reset() {
@@ -262,15 +256,22 @@ class OptimalPiecewiseLinearModel<X, Y>::CanonicalSegment {
 
     Point rectangle[4];
     X first, last;
+    int64_t points_in_hull;
 
-    CanonicalSegment(const Point &p0, const Point &p1, X first, X last) : rectangle{p0, p1, p0, p1}, first(first), last(last) {};
+    CanonicalSegment(const Point &p0, const Point &p1, X first, X last, int64_t pih) 
+        : rectangle{p0, p1, p0, p1}, first(first), last(last), points_in_hull(pih) {};
 
-    CanonicalSegment(const Point (&rectangle)[4], X first, X last)
-        : rectangle{rectangle[0], rectangle[1], rectangle[2], rectangle[3]}, first(first), last(last) {};
+    CanonicalSegment(const Point (&rectangle)[4], X first, X last, int64_t pih)
+        : rectangle{rectangle[0], rectangle[1], rectangle[2], rectangle[3]}, 
+            first(first), last(last), points_in_hull(pih)  {};
 
     bool one_point() const {
         return rectangle[0].x == rectangle[2].x && rectangle[0].y == rectangle[2].y
             && rectangle[1].x == rectangle[3].x && rectangle[1].y == rectangle[3].y;
+    }
+
+    bool two_point() const{
+        return points_in_hull == 2;
     }
 
 public:
@@ -288,44 +289,7 @@ public:
         return c;
     }
 
-    std::tuple<int64_t, uint8_t, SY> get_fixed_point_segment(X origin, X max_input) const {
-        if (one_point())
-            return {0, 0, (rectangle[0].y + rectangle[1].y) / 2};
-        // std::cout<<"in get_fixed_ps: "<<max_input<<std::endl;
-        auto &p1 = rectangle[1];
-        auto max_slope = rectangle[3] - rectangle[1];
-
-        auto is_slope_integral = max_slope.dy % max_slope.dx == 0;
-        auto slope_exponent = is_slope_integral ? 0 : (uint8_t) std::ceil(std::log2(max_input)) + 1;
-        auto slope_significand = (max_slope.dy << slope_exponent) / max_slope.dx;
-
-        auto intercept_n = max_slope.dy * (SX(origin) - p1.x);
-        auto intercept_d = max_slope.dx;
-        auto rounding_term = ((intercept_n < 0) ^ (intercept_d < 0) ? -1 : +1) * intercept_d / 2;
-        auto intercept = (intercept_n + rounding_term) / intercept_d + p1.y;
-
-        return {slope_significand, slope_exponent, intercept};
-    }
-    
-    SY get_prediction(X kmer) const{
-        auto &p1 = rectangle[1];
-        auto max_slope = rectangle[3] - rectangle[1];
-        auto origin = first;
-        auto max_input = last-first+1;
-
-        auto is_slope_integral = max_slope.dy % max_slope.dx == 0;
-        auto slope_exponent = is_slope_integral ? 0 : (uint8_t) std::ceil(std::log2(max_input)) + 1;
-        auto slope_significand = (max_slope.dy << slope_exponent) / max_slope.dx;
-
-        auto intercept_n = max_slope.dy * (SX(origin) - p1.x);
-        auto intercept_d = max_slope.dx;
-        auto rounding_term = ((intercept_n < 0) ^ (intercept_d < 0) ? -1 : +1) * intercept_d / 2;
-        auto intercept = (intercept_n + rounding_term) / intercept_d + p1.y;
-
-        auto prediction = (((slope_significand) * (kmer - first)) >> slope_exponent) + intercept;
-        return prediction;
-    }
-
+   
     std::string ConvertToString(__int128 num) {
         std::string str;
         do {
@@ -339,28 +303,48 @@ public:
     
     std::tuple<int64_t, int64_t> get_knot_intersection(X knot_end, int64_t eps){
         if (one_point()){
-            int64_t knot_si  = rectangle[1].y + eps;
-            // int64_t knot_ei = rectangle[2].y;
+            int64_t knot_si  = rectangle[1].y;// TODO: 2*eps
+            
             return {knot_si, knot_si};
         }
         X knot_start = first;
+        // TODO: Can adjust the values so that at query, mid is the first match
+        // slope does not matter, but knot_si has to be increasing
+        if(two_point()){
+            auto p1 = Point{rectangle[0].x,  rectangle[0].y - 2*eps};
+            auto p2 = Point{rectangle[2].x,  rectangle[2].y + eps};
+            auto slope = p2-p1;
+            
+            int64_t knot_si = rectangle[0].y - 2*eps;
+            int64_t knot_ei = round(int64_t(knot_si)+
+                    (uint64_t(slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
+                    /(double)slope.dx));
+            
+            return {knot_si, knot_ei};
+        }
+
+        
         auto max_slope = rectangle[3] - rectangle[1];
+        
+        
         int64_t knot_si = round(int64_t(rectangle[1].y) +
                     (max_slope.dy*(__int128_t(knot_start)-__int128_t(rectangle[1].x)))
                     /(double)max_slope.dx);
         int64_t knot_ei = round(int64_t(rectangle[1].y)+
                     (uint64_t(max_slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
                     /(double)max_slope.dx));
+        
 
         return {knot_si, knot_ei};
     }
 
-    bool isSlopeAtHalfPoint(X knot_end){
-        if (one_point()){
+    bool isSlopeAtHalfPoint(X knot_end, int64_t eps){
+        if (one_point() || two_point()){
             return false;
-        }
+        }                
         X knot_start = first;
         auto max_slope = rectangle[3] - rectangle[1];
+        
         double knot_si = int64_t(rectangle[1].y) +
                     (max_slope.dy*(__int128_t(knot_start)-__int128_t(rectangle[1].x)))
                     /(double)max_slope.dx;
@@ -368,6 +352,7 @@ public:
                     (uint64_t(max_slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
                     /(double)max_slope.dx);
         return ((floor(knot_si-0.5)== floor(knot_si))&& (floor(knot_ei - 0.5)==floor(knot_ei)));
+        
     }
 
     int64_t Pred_idx(int64_t brk_beg_sa_indx, int64_t brk_end_sa_indx,
@@ -382,10 +367,9 @@ public:
 };
 
 
-// no x value will be -1
+
 template<typename Fin, typename Fout, typename Ferr>
-size_t make_segmentation_rep_pla_strobe(int64_t n, int64_t epsilon, Fin in, Fout out, Ferr GetErr) {
-    // std::cout<<"start of segment: "<<n<<" "<<epsilon<<std::endl;
+size_t make_segmentation_rep_pla(int64_t n, int64_t epsilon, Fin in, Fout out, Ferr GetErr) {
     if (n == 0)
         return 0;
 
@@ -393,6 +377,7 @@ size_t make_segmentation_rep_pla_strobe(int64_t n, int64_t epsilon, Fin in, Fout
     using Y = typename std::invoke_result_t<Fin, size_t>::second_type;
     size_t c = 0;// count variable
     size_t start = 0;
+    
     
     bool isIncluded = false;
     OptimalPiecewiseLinearModel<X, Y> opt(epsilon);
@@ -412,7 +397,7 @@ size_t make_segmentation_rep_pla_strobe(int64_t n, int64_t epsilon, Fin in, Fout
     opt.add_point(p.first, p.second+epsilon, occurenceCount);
     
     bool isForcedKnot = false, isSlopeIssuePresent = false;
-    int64_t issueKmer = -1;
+    uint64_t issueKmer = 0;
     bool isSlopeOk = false;
     while(!isSlopeOk){
         for (int64_t i = start; i < n; ++i) {
@@ -421,7 +406,6 @@ size_t make_segmentation_rep_pla_strobe(int64_t n, int64_t epsilon, Fin in, Fout
             
             if ((i != start && next_p.first == p.first))
                 continue;
-            // std::cout<<i<<" ";
             p = next_p;
             curr_sa_indx = i;
             occurenceCount = 1;
@@ -432,650 +416,79 @@ size_t make_segmentation_rep_pla_strobe(int64_t n, int64_t epsilon, Fin in, Fout
                 else break;
             }
             i+=(occurenceCount-1);
-    //        std::cout<<occurenceCount<<std::endl;
-            //cout<<p.first<<" "<<isSlopeIssuePresent<<" "<<issueKmer
-              //  <<" "<<(p.first == issueKmer)<<endl;
             if(isSlopeIssuePresent && p.first == issueKmer){
-            //    cout<<"inside\n";
                 isSlopeIssuePresent = false;
                 isSlopeOk = true;
                 OptimalPiecewiseLinearModel<uint64_t, uint64_t>::CanonicalSegment cs = opt.get_segment();
-                // if(0){
-                if(cs.isSlopeAtHalfPoint(issueKmer)){
-                //if(1){
-              //      cout<<"Slope half\n";
+                
+                if(cs.isSlopeAtHalfPoint(issueKmer, epsilon)){
                     uint64_t chk_idx= opt.seg_start_indx;
                     
                     auto [knot_si, knot_ei] = cs.get_knot_intersection(issueKmer, epsilon);
-                    // std::cout<<"SlopeHalfPoint, seg start idx: "<<chk_idx<<" not working idx: "<<i
-                    //     <<" occur: "<<occurenceCount
-                    //     <<" seg: "<<c
-                    //     <<" knot_si: "<<knot_si<<" knot_ei: "<<knot_ei
-                    //     <<std::endl;
-                    /**
-                     * curr_kval is not included in the curr segment, so looping only in the last segment
-                     * first and last kmer/hash is guaranteed to be valid
-                     * */ 
-                    auto prev = in(chk_idx);
-                    uint64_t prev_seed = prev.first;
-                    for(chk_idx = opt.seg_start_indx+1; chk_idx<i-occurenceCount+1; chk_idx++){
-                        auto point = in(chk_idx);
-                        if(point.first == prev_seed || point.first == -1) continue;
-                        int64_t pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
-                                cs.get_first_x(), issueKmer, epsilon);
-                        
-                        // std::cout<<"chk idx "<<chk_idx<<" pred: "<<pred<<std::endl;
-                        
-                        if(pred < 0) pred = 0;
-                        if(pred > chk_idx){
-                            int32_t err = GetErr(chk_idx, pred);
-                            if(err<0) err*= -1;
-                            if(err > epsilon){
-                                isSlopeOk = false;  
-                          //      cout<<"Prev issue "<<issueKmer<<endl;
-                                issueKmer = point.first;
-                      //          std::cout<<chk_idx<<" pred: "<<pred<<" err: "<<err
-                        //            <<" "<<i<<" "<<issueKmer<<std::endl;
-                                break;
-                            }
-                        }
-                        prev_seed = point.first;
-                    }
-                    // std::cout<<"1st isSlopeOk: "<<isSlopeOk<<" chkIdx: "<<chk_idx<<" kmer: "<<issueKmer<<std::endl;
-                    if(!isSlopeOk){                        
-                        isSlopeIssuePresent = true;
-                        opt.reset();
-                        i = opt.seg_start_indx - 1;
-                        start = i+1;
-                        // std::cout<<"slope issue: "<<c<<std::endl;
-                        continue;
-                    }
-                    //out(opt.get_segment(), issueKmer);
-                    //++c;
-                    //opt.reset();
-                    //opt.seg_start_indx = i-occurenceCount+1;
-                }
-                out(opt.get_segment(), issueKmer);
-                // if(cs.get_first_x() == 4398046511103){
-                //     cout<<"1.Match: "<<opt.seg_start_indx<<" "<<issueKmer<<endl;
-                // }
-                ++c;
-                opt.reset();
-                opt.seg_start_indx = i-occurenceCount+1;
-            }
-            isIncluded = opt.add_point(p.first, p.second+epsilon, occurenceCount);
-            if (!isIncluded) {
-                /**
-                 * TODO: Check to see if the seg slope is *.5.
-                 * If it is, check whether any point in this segment has the error 
-                 * value beyond epsilon
-                 * If there is some point, put a forced knot at that point and 
-                 * recalculate (?) starting from the first point at this segment
-                 * */ 
-                isSlopeOk = true;
-                OptimalPiecewiseLinearModel<uint64_t, uint64_t>::CanonicalSegment cs = opt.get_segment();
-                // if(0){
-                if(cs.isSlopeAtHalfPoint(p.first)){
-                //if(1){
-                    
-                    uint64_t chk_idx= opt.seg_start_indx;
-                    
-                    auto [knot_si, knot_ei] = cs.get_knot_intersection(p.first, epsilon);
-                    // std::cout<<"SlopeHalfPoint, seg start idx: "<<chk_idx<<" not working idx: "<<i
-                    //     <<" occur: "<<occurenceCount
-                    //     <<" seg: "<<c
-                    //     <<" knot_si: "<<knot_si<<" knot_ei: "<<knot_ei
-                    //     <<std::endl;
-                    /**
-                     * curr_kval is not included in the curr segment, so looping only in the last segment
-                     * first and last kmer/hash is guaranteed to be valid
-                     * */ 
                     
                     auto prev = in(chk_idx);
-                    // if(prev.first == 2099204){
-                    //     cout<<"target segment: "<<knot_si<<" "<<knot_ei
-                    //         <<" "<<cs.get_first_x()<<endl;
-                    //     auto temp = in(i-occurenceCount-1);
-                    //     cout<<temp.first<<endl;
-                    //     temp = in(i-occurenceCount);
-                    //     cout<<temp.first<<endl;
-                    //     cout<<p.first<<" i: "<<i<<" "<<occurenceCount<<endl;
-                    // }
                     uint64_t prev_seed = prev.first;
                     for(chk_idx = opt.seg_start_indx+1; chk_idx<i-occurenceCount+1; chk_idx++){
                         auto point = in(chk_idx);
                         if(point.first == prev_seed) continue;
-                        int64_t pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
-                                cs.get_first_x(), p.first, epsilon);
-                        
-                        // std::cout<<"chk idx "<<chk_idx<<" pred: "<<pred<<std::endl;
-                        
-                        if(pred < 0) pred = 0;
-                        
-                        if(pred > chk_idx){
-                            int32_t err = GetErr(chk_idx, pred);
-                            // std::cout<<chk_idx<<" pred: "<<pred<<" err: "<<err<<std::endl;
-                            if(err<0) err*= -1;
-                            if(err > epsilon){
-                                isSlopeOk = false;
-                                issueKmer = point.first;
-                                break;
-                            }
-                        }
-                        prev_seed = point.first;
-                    }
-                     //std::cout<<"2nd isSlopeOk: "<<isSlopeOk<<" chkIdx: "<<chk_idx<<" kmer: "<<issueKmer<<std::endl;
-                    if(!isSlopeOk){                        
-                        isSlopeIssuePresent = true;
-                        opt.reset();
-                        i = opt.seg_start_indx - 1;
-                        start = i+1;
-                        // std::cout<<"slope issue: "<<c<<std::endl;
-                    }
-                }
-                if(isSlopeOk){
-                    out(opt.get_segment(), p.first); 
-                    // if(cs.get_first_x() == 4398046511103){
-                    //     cout<<"2.Match: "<<opt.seg_start_indx<<endl;
-                    // }
-                    // this segment does not include curr_kval
-                    // current i points to the last occurence of the curr_kval
-                    // need to point i to the (first occurence of the) current kval
-                    start = i - occurenceCount + 1;
-                    i = start - 1;
-                    opt.seg_start_indx = start;                    
-                    ++c;
-                }
-            }
-            // else{
-            //     if(isSlopeIssuePresent){
-            //         if(issueKmer == p.first){
-            //             isForcedKnot = true;
-            //             isSlopeIssuePresent = false;
-            //             // std::cout<<"slope issue found\n";
-            //         }
-            //     }
-            // }
-        }
-        // have to check for the last segment whether slope is ok
-        OptimalPiecewiseLinearModel<uint64_t, uint64_t>::CanonicalSegment cs = opt.get_segment();
-        isSlopeOk = true;
-        if(cs.isSlopeAtHalfPoint(p.first)){
-        //if(1){
-            uint64_t chk_idx= opt.seg_start_indx;
-            // std::cout<<"SlopeHalfPoint, seg start idx: "<<chk_idx<<" not working idx: "<<n
-            //     <<" occur: "<<occurenceCount
-            //     <<" seg: "<<c<<std::endl;
-            auto [knot_si, knot_ei] = cs.get_knot_intersection(p.first, epsilon);
-            
-            auto prev = in(chk_idx);
-            uint64_t prev_seed = prev.first;
-            for(chk_idx = opt.seg_start_indx+1; chk_idx<n-occurenceCount; chk_idx++){
-                auto point = in(chk_idx);
-                if(point.first == prev_seed ) continue;
-                int64_t pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
-                        cs.get_first_x(), p.first, epsilon);
-                if(pred < 0) pred = 0;            
-                if(pred > chk_idx){
-                    int32_t err = GetErr(chk_idx, pred);
-                    if(err<0) err*= -1;
-                    if(err > epsilon){
-                        isSlopeOk = false;
-                        issueKmer = point.first;
-                        break;
-                    }
-                }
-                prev_seed = point.first;
-            }
-            // std::cout<<"isSlopeOk: "<<isSlopeOk<<" chkIdx: "<<chk_idx<<" kmer: "<<issueKmer<<std::endl;
-            if(!isSlopeOk){            
-                isSlopeIssuePresent = true;
-                opt.reset();
-                start = opt.seg_start_indx;
-                // std::cout<<"slope issue: "<<c<<std::endl;
-            }
-        }
-        if(isSlopeOk){
-            out(opt.get_segment(), p.first); // this segment does not include curr_kval
-            ++c;
-        }
-
-    }
-    // have to check whether there is slope issue for the last segment as well
-    return c;
-}
-
-
-template<typename Fin, typename Fout, typename Ferr>
-size_t make_segmentation_basic_pla(int64_t n, int64_t epsilon, Fin in, Fout out, Ferr GetErr) {
-    // std::cout<<"start of segment: "<<n<<" "<<epsilon<<std::endl;
-    if (n == 0)
-        return 0;
-
-    using X = typename std::invoke_result_t<Fin, size_t>::first_type;
-    using Y = typename std::invoke_result_t<Fin, size_t>::second_type;
-    size_t c = 0;// count variable
-    size_t start = 0;
-    
-    bool isIncluded = false;
-    OptimalPiecewiseLinearModel<X, Y> opt(epsilon);
-    opt.seg_start_indx = start;
-    auto p = in(start);
-    while(1){
-        p = in(start); // pair of (x,y)
-        if(p.first != -1){
-            break;
-        }
-        start++;
-    }
-    // counting repeats to increase range
-    int64_t curr_sa_indx = start, occurenceCount = 1;
-    while(1){
-        curr_sa_indx++;
-        auto temp = in(curr_sa_indx);
-        if(temp.first == p.first) occurenceCount++;
-        else break;
-    }
-    
-    start = curr_sa_indx; // as at curr indx new kmer has started        
-    opt.add_point(p.first, p.second+epsilon, 1);
-    
-    // knot_sx = p.first;
-    // std::cout<<p.first<<" "<<p.second<<" "<<std::endl;
-    // int64_t unique_kmers = 1;
-    
-    // vector<int64_t> kval_vec;
-    // vector<int64_t> range_start_vec;
-    // vector<int64_t> range_end_vec;
-    bool isForcedKnot = false, isSlopeIssuePresent = false;
-    int64_t issueKmer = 0;
-    bool isSlopeOk = false;
-    while(!isSlopeOk){
-        for (int64_t i = start; i < n; ++i) {
-            if(isForcedKnot){
-                isForcedKnot = false;
-                out(opt.get_segment(), issueKmer);
-                opt.reset();
-                // std::cout<<"Forced index: "<<i<<std::endl;
-                start = i-1;
-                while(1){
-                    p = in(start);
-                    if(p.first != -1){
-                        int64_t temp = p.first;
-                        while (1)
-                        {
-                            start--;
-                            auto t = in(start);
-                            if(t.first != temp) break;
-                        }
-                        
-                        i = start++;
-                        break;
-                    }
-                    start--;
-                }
-                // std::cout<<"New i: "<<i<<std::endl;
-                opt.seg_start_indx = i+1;
-                
-                ++c;
-                continue;
-            }
-            auto next_p = in(i);
-            
-            if ((i != start && next_p.first == p.first) || next_p.first == -1)
-                continue;
-    //        std::cout<<i<<std::endl;
-            p = next_p;
-            curr_sa_indx = i;
-            occurenceCount = 1;
-            while(1){
-                curr_sa_indx++;
-                auto temp = in(curr_sa_indx);
-                if(temp.first == p.first) occurenceCount++;
-                else break;
-            }
-            i+=(occurenceCount-1);
-    //        std::cout<<occurenceCount<<std::endl;
-            
-            isIncluded = opt.add_point(p.first, p.second+epsilon, 1);
-            if (!isIncluded) {
-                /**
-                 * TODO: Check to see if the seg slope is *.5.
-                 * If it is, check whether any point in this segment has the error 
-                 * value beyond epsilon
-                 * If there is some point, put a forced knot at that point and 
-                 * recalculate (?) starting from the first point at this segment
-                 * */ 
-                isSlopeOk = true;
-                OptimalPiecewiseLinearModel<int64_t, uint64_t>::CanonicalSegment cs = opt.get_segment();
-                // if(0){
-                if(cs.isSlopeAtHalfPoint(cs.get_last_x())){
-                    
-                    uint64_t chk_idx= opt.seg_start_indx;
-                    auto [knot_si, knot_ei] = cs.get_knot_intersection(cs.get_last_x(), epsilon);
-                    // std::cout<<"SlopeHalfPoint, seg start idx: "<<chk_idx<<" not working idx: "<<i
-                    //     <<" occur: "<<occurenceCount
-                    //     <<" seg: "<<c
-                    //     <<" knot_si: "<<knot_si<<" knot_ei: "<<knot_ei
-                    //     <<std::endl;
-                    /**
-                     * curr_kval is not included in the curr segment, so looping only in the last segment
-                     * first and last kmer/hash is guaranteed to be valid
-                     * */ 
-                    auto prev = in(chk_idx);
-                    uint64_t prev_seed = prev.first;
-                    for(chk_idx = opt.seg_start_indx+1; chk_idx<i-occurenceCount; chk_idx++){
-                        auto point = in(chk_idx);
-                        if(point.first == prev_seed || point.first == -1) continue;
-                        int64_t pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
-                                cs.get_first_x(), cs.get_last_x(), epsilon);
-                        
-                        // std::cout<<"chk idx "<<chk_idx<<" pred: "<<pred<<std::endl;
-                        
-                        if(pred < 0) pred = 0;
-                        
-                        if(pred > chk_idx){
-                            int32_t err = GetErr(chk_idx, pred);
-                            // std::cout<<chk_idx<<" pred: "<<pred<<" err: "<<err<<std::endl;
-                            if(err<0) err*= -1;
-                            if(err > epsilon){
-                                isSlopeOk = false;
-                                issueKmer = point.first;
-                                break;
-                            }
-                        }
-                        prev_seed = point.first;
-                    }
-                    // std::cout<<"isSlopeOk: "<<isSlopeOk<<" chkIdx: "<<chk_idx<<" kmer: "<<issueKmer<<std::endl;
-                    if(!isSlopeOk){                        
-                        isSlopeIssuePresent = true;
-                        opt.reset();
-                        i = opt.seg_start_indx - 1;
-                        start = i+1;
-                        // std::cout<<"slope issue: "<<c<<std::endl;
-                    }
-                }
-                if(isSlopeOk){
-                    out(opt.get_segment(), cs.get_last_x()); // this segment does not include curr_kval
-                    // current i points to the last occurence of the curr_kval
-                    // need to point i to the (first occurence of the)
-                    //last kmer at the last written segment
-                    start = i - occurenceCount;
-                    while(1){
-                        p = in(start);
-                        if(p.first != -1){
-                            int64_t temp = p.first;
-                            while (1)
-                            {
-                                start--;
-                                //     if(start < 0) break; // should not happen
-                                auto t = in(start);
-                                if(t.first != temp) break;
-                            }
-                            
-                            i = start++;
-                            break;
-                        }
-                        start--;
-                    }
-                    opt.seg_start_indx = start;                    
-                    ++c;
-                }
-
-                
-            }
-            else{
-                if(isSlopeIssuePresent){
-                    if(issueKmer == p.first){
-                        isForcedKnot = true;
-                        isSlopeIssuePresent = false;
-                        // std::cout<<"slope issue found\n";
-                    }
-                }
-            }
-        }
-        // have to check for the last segment whether slope is ok
-        OptimalPiecewiseLinearModel<int64_t, uint64_t>::CanonicalSegment cs = opt.get_segment();
-        isSlopeOk = true;
-        if(cs.isSlopeAtHalfPoint(cs.get_last_x())){
-            
-            uint64_t chk_idx= opt.seg_start_indx;
-            // std::cout<<"SlopeHalfPoint, seg start idx: "<<chk_idx<<" not working idx: "<<n
-            //     <<" occur: "<<occurenceCount
-            //     <<" seg: "<<c<<std::endl;
-            auto [knot_si, knot_ei] = cs.get_knot_intersection(cs.get_last_x(), epsilon);
-            /**
-             * curr_kval is not included in the curr segment, so looping only in the last segment
-             * first and last kmer/hash is guaranteed to be valid
-             * */ 
-            auto prev = in(chk_idx);
-            uint64_t prev_seed = prev.first;
-            for(chk_idx = opt.seg_start_indx+1; chk_idx<n-occurenceCount; chk_idx++){
-                auto point = in(chk_idx);
-                if(point.first == prev_seed || point.first == -1) continue;
-                int64_t pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
-                        cs.get_first_x(), cs.get_last_x(), epsilon);
-                if(pred < 0) pred = 0;            
-                if(pred > chk_idx){
-                    int32_t err = GetErr(chk_idx, pred);
-                    if(err<0) err*= -1;
-                    if(err > epsilon){
-                        isSlopeOk = false;
-                        issueKmer = point.first;
-                        break;
-                    }
-                }
-                prev_seed = point.first;
-            }
-            // std::cout<<"isSlopeOk: "<<isSlopeOk<<" chkIdx: "<<chk_idx<<" kmer: "<<issueKmer<<std::endl;
-            if(!isSlopeOk){            
-                isSlopeIssuePresent = true;
-                opt.reset();
-                start = opt.seg_start_indx;
-                // std::cout<<"slope issue: "<<c<<std::endl;
-            }
-        }
-        if(isSlopeOk){
-            out(opt.get_segment(), cs.get_last_x()); // this segment does not include curr_kval
-            ++c;
-        }
-
-    }
-    // have to check whether there is slope issue for the last segment as well
-    return c;
-}
-
-
-
-template<typename Fin, typename Fout, typename Ferr>
-size_t make_segmentation(int64_t n, int64_t epsilon, Fin in, Fout out, Ferr GetErr) {
-    // std::cout<<"start of segment: "<<n<<" "<<epsilon<<std::endl;
-    if (n == 0)
-        return 0;
-
-    using X = typename std::invoke_result_t<Fin, size_t>::first_type;
-    using Y = typename std::invoke_result_t<Fin, size_t>::second_type;
-    size_t c = 0;// count variable
-    size_t start = 0;
-    
-    bool isIncluded = false;
-    OptimalPiecewiseLinearModel<X, Y> opt(epsilon);
-    
-    auto p = in(start);
-    // uint64_t knot_sx, knot_ex; //knot start x value and end x value
-    // make sure the first kmer is a valid one
-    // for strobealign, not needed
-    while(1){
-        p = in(start); // pair of (x,y)
-        if(p.first != -1){
-            break;
-        }
-        start++;
-    }
-    opt.seg_start_indx = start;
-    // counting repeats to increase range
-    int64_t curr_sa_indx = start, occurenceCount = 1;
-    while(1){
-        curr_sa_indx++;
-        auto temp = in(curr_sa_indx);
-        if(temp.first == p.first) occurenceCount++;
-        else break;
-    }
-    
-    start = curr_sa_indx; // as at curr indx new kmer has started        
-    opt.add_point(p.first, p.second+epsilon, occurenceCount);
-    
-    // knot_sx = p.first;
-    // std::cout<<p.first<<" "<<p.second<<" "<<std::endl;
-    // int64_t unique_kmers = 1;
-    
-    // vector<int64_t> kval_vec;
-    // vector<int64_t> range_start_vec;
-    // vector<int64_t> range_end_vec;
-    bool isForcedKnot = false, isSlopeIssuePresent = false;
-    int64_t issueKmer = -1;
-    bool isSlopeOk = false;
-    while(!isSlopeOk){
-        for (int64_t i = start; i < n; ++i) {
-           
-            auto next_p = in(i);
-            
-            if ((i != start && next_p.first == p.first) || next_p.first == -1)
-                continue;
-            // std::cout<<i<<" ";
-            p = next_p;
-            curr_sa_indx = i;
-            occurenceCount = 1;
-            while(1){
-                curr_sa_indx++;
-                auto temp = in(curr_sa_indx);
-                if(temp.first == p.first) occurenceCount++;
-                else break;
-            }
-            i+=(occurenceCount-1);
-    //        std::cout<<occurenceCount<<std::endl;
-            //cout<<p.first<<" "<<isSlopeIssuePresent<<" "<<issueKmer
-              //  <<" "<<(p.first == issueKmer)<<endl;
-            if(isSlopeIssuePresent && p.first == issueKmer){
-            //    cout<<"inside\n";
-                isSlopeIssuePresent = false;
-                isSlopeOk = true;
-                OptimalPiecewiseLinearModel<int64_t, uint64_t>::CanonicalSegment cs = opt.get_segment();
-                // if(0){
-                if(cs.isSlopeAtHalfPoint(issueKmer)){
-                //if(1){
-              //      cout<<"Slope half\n";
-                    uint64_t chk_idx= opt.seg_start_indx;
-                    
-                    auto [knot_si, knot_ei] = cs.get_knot_intersection(issueKmer, epsilon);
-                    // std::cout<<"SlopeHalfPoint, seg start idx: "<<chk_idx<<" not working idx: "<<i
-                    //     <<" occur: "<<occurenceCount
-                    //     <<" seg: "<<c
-                    //     <<" knot_si: "<<knot_si<<" knot_ei: "<<knot_ei
-                    //     <<std::endl;
-                    /**
-                     * curr_kval is not included in the curr segment, so looping only in the last segment
-                     * first and last kmer/hash is guaranteed to be valid
-                     * */ 
-                    auto prev = in(chk_idx);
-                    uint64_t prev_seed = prev.first;
-                    for(chk_idx = opt.seg_start_indx+1; chk_idx<i-occurenceCount+1; chk_idx++){
-                        auto point = in(chk_idx);
-                        if(point.first == prev_seed || point.first == -1) continue;
-                        int64_t pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
+                        int64_t pred;
+                        pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
                                 cs.get_first_x(), issueKmer, epsilon);
                         
-                        // std::cout<<"chk idx "<<chk_idx<<" pred: "<<pred<<std::endl;
+                        if(point.first == DEBUG_PRINT_PLA){
+                            int64_t err = GetErr(chk_idx, pred);
+                        }
                         
                         if(pred < 0) pred = 0;
                         if(pred > chk_idx){
-                            int32_t err = GetErr(chk_idx, pred);
+                            int64_t err = GetErr(chk_idx, pred);
                             if(err<0) err*= -1;
                             if(err > epsilon){
                                 isSlopeOk = false;  
-                          //      cout<<"Prev issue "<<issueKmer<<endl;
                                 issueKmer = point.first;
-                      //          std::cout<<chk_idx<<" pred: "<<pred<<" err: "<<err
-                        //            <<" "<<i<<" "<<issueKmer<<std::endl;
                                 break;
                             }
                         }
                         prev_seed = point.first;
                     }
-                    // std::cout<<"1st isSlopeOk: "<<isSlopeOk<<" chkIdx: "<<chk_idx<<" kmer: "<<issueKmer<<std::endl;
                     if(!isSlopeOk){                        
                         isSlopeIssuePresent = true;
                         opt.reset();
                         i = opt.seg_start_indx - 1;
                         start = i+1;
-                        // std::cout<<"slope issue: "<<c<<std::endl;
                         continue;
                     }
-                    //out(opt.get_segment(), issueKmer);
-                    //++c;
-                    //opt.reset();
-                    //opt.seg_start_indx = i-occurenceCount+1;
                 }
                 out(opt.get_segment(), issueKmer);
-                // if(cs.get_first_x() == 4398046511103){
-                //     cout<<"1.Match: "<<opt.seg_start_indx<<" "<<issueKmer<<endl;
-                // }
                 ++c;
                 opt.reset();
                 opt.seg_start_indx = i-occurenceCount+1;
             }
             isIncluded = opt.add_point(p.first, p.second+epsilon, occurenceCount);
             if (!isIncluded) {
-                /**
-                 * TODO: Check to see if the seg slope is *.5.
-                 * If it is, check whether any point in this segment has the error 
-                 * value beyond epsilon
-                 * If there is some point, put a forced knot at that point and 
-                 * recalculate (?) starting from the first point at this segment
-                 * */ 
                 isSlopeOk = true;
-                OptimalPiecewiseLinearModel<int64_t, uint64_t>::CanonicalSegment cs = opt.get_segment();
-                // if(0){
-                if(cs.isSlopeAtHalfPoint(p.first)){
-                //if(1){
-                    
+                OptimalPiecewiseLinearModel<uint64_t, uint64_t>::CanonicalSegment cs = opt.get_segment();
+                
+                if(cs.isSlopeAtHalfPoint(p.first, epsilon)){
+                
                     uint64_t chk_idx= opt.seg_start_indx;
                     
                     auto [knot_si, knot_ei] = cs.get_knot_intersection(p.first, epsilon);
-                    // std::cout<<"SlopeHalfPoint, seg start idx: "<<chk_idx<<" not working idx: "<<i
-                    //     <<" occur: "<<occurenceCount
-                    //     <<" seg: "<<c
-                    //     <<" knot_si: "<<knot_si<<" knot_ei: "<<knot_ei
-                    //     <<std::endl;
-                    /**
-                     * curr_kval is not included in the curr segment, so looping only in the last segment
-                     * first and last kmer/hash is guaranteed to be valid
-                     * */ 
                     
                     auto prev = in(chk_idx);
-                    // if(prev.first == 2099204){
-                    //     cout<<"target segment: "<<knot_si<<" "<<knot_ei
-                    //         <<" "<<cs.get_first_x()<<endl;
-                    //     auto temp = in(i-occurenceCount-1);
-                    //     cout<<temp.first<<endl;
-                    //     temp = in(i-occurenceCount);
-                    //     cout<<temp.first<<endl;
-                    //     cout<<p.first<<" i: "<<i<<" "<<occurenceCount<<endl;
-                    // }
+                    
                     uint64_t prev_seed = prev.first;
                     for(chk_idx = opt.seg_start_indx+1; chk_idx<i-occurenceCount+1; chk_idx++){
                         auto point = in(chk_idx);
-                        if(point.first == prev_seed || point.first == -1) continue;
-                        int64_t pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
+                        if(point.first == prev_seed) continue;
+                        int64_t pred;
+                        pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
                                 cs.get_first_x(), p.first, epsilon);
-                        
-                        // std::cout<<"chk idx "<<chk_idx<<" pred: "<<pred<<std::endl;
                         
                         if(pred < 0) pred = 0;
                         
                         if(pred > chk_idx){
-                            int32_t err = GetErr(chk_idx, pred);
-                            // std::cout<<chk_idx<<" pred: "<<pred<<" err: "<<err<<std::endl;
+                            int64_t err = GetErr(chk_idx, pred);
                             if(err<0) err*= -1;
                             if(err > epsilon){
                                 isSlopeOk = false;
@@ -1085,60 +498,45 @@ size_t make_segmentation(int64_t n, int64_t epsilon, Fin in, Fout out, Ferr GetE
                         }
                         prev_seed = point.first;
                     }
-                     //std::cout<<"2nd isSlopeOk: "<<isSlopeOk<<" chkIdx: "<<chk_idx<<" kmer: "<<issueKmer<<std::endl;
+                     
                     if(!isSlopeOk){                        
                         isSlopeIssuePresent = true;
                         opt.reset();
                         i = opt.seg_start_indx - 1;
                         start = i+1;
-                        // std::cout<<"slope issue: "<<c<<std::endl;
                     }
                 }
                 if(isSlopeOk){
                     out(opt.get_segment(), p.first); 
-                    // if(cs.get_first_x() == 4398046511103){
-                    //     cout<<"2.Match: "<<opt.seg_start_indx<<endl;
-                    // }
-                    // this segment does not include curr_kval
-                    // current i points to the last occurence of the curr_kval
-                    // need to point i to the (first occurence of the) current kval
+                    opt.reset();
                     start = i - occurenceCount + 1;
                     i = start - 1;
                     opt.seg_start_indx = start;                    
                     ++c;
                 }
             }
-            // else{
-            //     if(isSlopeIssuePresent){
-            //         if(issueKmer == p.first){
-            //             isForcedKnot = true;
-            //             isSlopeIssuePresent = false;
-            //             // std::cout<<"slope issue found\n";
-            //         }
-            //     }
-            // }
         }
         // have to check for the last segment whether slope is ok
-        OptimalPiecewiseLinearModel<int64_t, uint64_t>::CanonicalSegment cs = opt.get_segment();
+        OptimalPiecewiseLinearModel<uint64_t, uint64_t>::CanonicalSegment cs = opt.get_segment();
         isSlopeOk = true;
-        if(cs.isSlopeAtHalfPoint(p.first)){
-        //if(1){
+        if(cs.isSlopeAtHalfPoint(p.first, epsilon)){
             uint64_t chk_idx= opt.seg_start_indx;
-            // std::cout<<"SlopeHalfPoint, seg start idx: "<<chk_idx<<" not working idx: "<<n
-            //     <<" occur: "<<occurenceCount
-            //     <<" seg: "<<c<<std::endl;
+           
             auto [knot_si, knot_ei] = cs.get_knot_intersection(p.first, epsilon);
             
             auto prev = in(chk_idx);
             uint64_t prev_seed = prev.first;
             for(chk_idx = opt.seg_start_indx+1; chk_idx<n-occurenceCount; chk_idx++){
                 auto point = in(chk_idx);
-                if(point.first == prev_seed || point.first == -1) continue;
-                int64_t pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
+                if(point.first == prev_seed) continue;
+                int64_t pred;
+                pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
                         cs.get_first_x(), p.first, epsilon);
+
+
                 if(pred < 0) pred = 0;            
                 if(pred > chk_idx){
-                    int32_t err = GetErr(chk_idx, pred);
+                    int64_t err = GetErr(chk_idx, pred);
                     if(err<0) err*= -1;
                     if(err > epsilon){
                         isSlopeOk = false;
@@ -1148,16 +546,17 @@ size_t make_segmentation(int64_t n, int64_t epsilon, Fin in, Fout out, Ferr GetE
                 }
                 prev_seed = point.first;
             }
-            // std::cout<<"isSlopeOk: "<<isSlopeOk<<" chkIdx: "<<chk_idx<<" kmer: "<<issueKmer<<std::endl;
+            
             if(!isSlopeOk){            
                 isSlopeIssuePresent = true;
                 opt.reset();
                 start = opt.seg_start_indx;
-                // std::cout<<"slope issue: "<<c<<std::endl;
+            
             }
         }
         if(isSlopeOk){
             out(opt.get_segment(), p.first); // this segment does not include curr_kval
+            opt.reset();
             ++c;
         }
 
@@ -1165,46 +564,3 @@ size_t make_segmentation(int64_t n, int64_t epsilon, Fin in, Fout out, Ferr GetE
     // have to check whether there is slope issue for the last segment as well
     return c;
 }
-
-
-
-/*
-template<typename Fin, typename Fout, typename Fsa>
-size_t make_segmentation_par(size_t n, size_t epsilon, Fin in, Fout out) {
-    auto parallelism = std::min<size_t>(omp_get_max_threads(), 20);
-    auto chunk_size = n / parallelism;
-    auto c = 0ull;
-
-    if (parallelism == 1 || n < 1ull << 15)
-        return make_segmentation(n, epsilon, in, out);
-    // std::cout<< parallelism<<" Does not call here\n";
-    using X = typename std::invoke_result_t<Fin, size_t>::first_type;
-    using Y = typename std::invoke_result_t<Fin, size_t>::second_type;
-    using canonical_segment = typename OptimalPiecewiseLinearModel<X, Y>::CanonicalSegment;
-    std::vector<std::vector<canonical_segment>> results(parallelism);
-
-    #pragma omp parallel for reduction(+:c) num_threads(parallelism)
-    for (auto i = 0ull; i < parallelism; ++i) {
-        auto first = i * chunk_size;
-        auto last = i == parallelism - 1 ? n : first + chunk_size;
-        if (first > 0) {
-            for (; first < last; ++first)
-                if (in(first).first != in(first - 1).first)
-                    break;
-            if (first == last)
-                continue;
-        }
-        // std::cout<<i<<std::endl;
-        auto in_fun = [in, first](auto j) { return in(first + j); };
-        auto out_fun = [&results, i](const auto &cs) { results[i].emplace_back(cs); };
-        results[i].reserve(chunk_size / (epsilon > 0 ? epsilon * epsilon : 16));
-        c += make_segmentation(last - first, epsilon, in_fun, out_fun);
-    }
-
-    for (auto &v : results)
-        for (auto &cs : v)
-            out(cs);
-    // std::cout<<"Number of segments [thread]: "<<c+1<<std::endl;
-    return c;
-}
-*/

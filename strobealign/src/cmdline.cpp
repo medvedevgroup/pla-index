@@ -20,9 +20,8 @@ CommandLineOptions parse_command_line_arguments(int argc, char **argv) {
 
     // Threading
     args::ValueFlag<int> threads(parser, "INT", "Number of threads [3]", {'t', "threads"});
-    args::ValueFlag<int> eps(parser, "INT", "Epsilon to use in pla-index [15]", {"eps"});
+    args::ValueFlag<int> eps(parser, "INT", "Epsilon (max error) value to use in constructing pla-index [15]", {"eps"});
     args::ValueFlag<int> chunk_size(parser, "INT", "Number of reads processed by a worker thread at once [10000]", {"chunk-size"}, args::Options::Hidden);
-    
 
     args::Group io(parser, "Input/output:");
     args::ValueFlag<std::string> o(parser, "PATH", "redirect output to file [stdout]", {'o'});
@@ -56,9 +55,6 @@ CommandLineOptions parse_command_line_arguments(int argc, char **argv) {
     args::ValueFlag<float> S(parser, "FLOAT", "Try candidate sites with mapping score at least S of maximum mapping score [0.5]", {'S'});
     args::ValueFlag<int> M(parser, "INT", "Maximum number of mapping sites to try [20]", {'M'});
     args::ValueFlag<int> R(parser, "INT", "Rescue level. Perform additional search for reads with many repetitive seeds filtered out. This search includes seeds of R*repetitive_seed_size_filter (default: R=2). Higher R than default makes strobealign significantly slower but more accurate. R <= 1 deactivates rescue and is the fastest.", {'R'});
-
-    // args::Group pla(parser, "PLA-Index parameters:");
-    
 
     args::Positional<std::string> ref_filename(parser, "reference", "Reference in FASTA format", args::Options::Required);
     args::Positional<std::string> reads1_filename(parser, "reads1", "Reads 1 in FASTA or FASTQ format, optionally gzip compressed");
@@ -132,8 +128,6 @@ CommandLineOptions parse_command_line_arguments(int argc, char **argv) {
     if (S) { opt.dropoff_threshold = args::get(S); }
     if (M) { opt.max_tries = args::get(M); }
     if (R) { opt.rescue_level = args::get(R); }
-
-    
 
     // Reference and read files
     opt.ref_filename = args::get(ref_filename);

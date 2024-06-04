@@ -13,7 +13,7 @@ find_package(OpenMP)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -mbmi2 -msse4.2 -DNDEBUG -march=native")
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING
@@ -63,14 +63,13 @@ add_library(salib STATIC ${SOURCES}
   src/readlen.cpp
   src/version.cpp
   src/io.cpp
-  src/BitPacking.cpp
   src/pla_index.cpp
   ext/xxhash.c
   ext/ssw/ssw_cpp.cpp
   ext/ssw/ssw.c
 )
-target_include_directories(salib PUBLIC src/ ext/ /home/hasin/include ${PROJECT_BINARY_DIR}) 
-target_link_directories(salib PUBLIC /home/hasin/lib) 
+target_include_directories(salib PUBLIC src/ ext/ /research/mqa6002/Softwares/Installed/include/ ${PROJECT_BINARY_DIR})
+target_link_directories(salib PUBLIC /research/mqa6002/Softwares/Installed/lib/)
 target_link_libraries(salib PUBLIC ZLIB::ZLIB Threads::Threads zstr::zstr sdsl divsufsort divsufsort64)
 IF(ENABLE_AVX)
   target_compile_options(salib PUBLIC "-mavx2")

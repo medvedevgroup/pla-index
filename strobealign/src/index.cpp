@@ -87,16 +87,8 @@ void StrobemerIndex::write(const std::string& filename) const {
 
     write_vector(ofs, randstrobes);
     rs_pla_index.Save(ofs);
-    // writing the indices
-    // write_vector(ofs, randstrobe_start_indices);
-    // change to seg-dict
-    // seg_dict.Save(ofs);
-
-    // const std::string point_vec = "strobe_pv.bin";
-    // std::ofstream pfs(point_vec, std::ios::binary);
-    // write_vector(pfs, randstrobe_start_indices);
-
-    const std::string apr_dic = "pla_indx_"+std::to_string(rs_pla_index.get_epsilon())+".bin";
+    
+    const std::string apr_dic = "strobe_pla_index_"+std::to_string(rs_pla_index.get_epsilon())+".bin";
     std::ofstream afs(apr_dic, std::ios::binary);
     rs_pla_index.Save(afs);
     
@@ -156,7 +148,74 @@ int StrobemerIndex::pick_bits(size_t size) const {
 size_t StrobemerIndex::find(randstrobe_hash_t key) const {
     // logger.debug()<<" Find Key "<<key<<"\n";
     // return rs_pla_index.QueryKmer(randstrobes, key);
+    // logger.debug()<<"Key: "<<key<<"\n";
+    // uint64_t seg_res = rs_pla_index.query(randstrobes, key);
+    // logger.debug()<<"seg res: "<<seg_res<<endl;
+    // logger.debug()<<" "<<randstrobes[seg_res].hash<<"\n";
     return rs_pla_index.query(randstrobes, key);
+    /*
+    uint64_t seg_res = rs_pla_index.query(randstrobes, key);
+    logger.debug()<<"position: "<<seg_res<<"\n";
+    
+    constexpr int MAX_LINEAR_SEARCH = 4;
+    const unsigned int top_N = key >> (64 - bits);
+    bucket_index_t position_start = randstrobe_start_indices[top_N];
+    bucket_index_t position_end = randstrobe_start_indices[top_N + 1];
+    if (position_start == position_end) {
+        // if(seg_res != end()){
+        //     string err = "1. seg not equal seg_res: "+to_string(seg_res)
+        //             +" end: "+to_string(end()) +" key: "+to_string(key);
+        //     throw BadParameter(err.c_str());
+        // }
+        return end();
+    }
+
+    if (position_end - position_start < MAX_LINEAR_SEARCH) {
+        for ( ; position_start < position_end; ++position_start) {
+            if (randstrobes[position_start].hash == key){
+                // if(seg_res != position_start){
+                //     string err = "2. seg not equal end: "+to_string(seg_res)+" "+to_string(position_start);
+                //     throw BadParameter(err.c_str());
+                // }
+                return position_start;
+            }
+            if (randstrobes[position_start].hash > key) {
+                // if(seg_res != end()){
+                //     string err = "3. seg not equal seg_res: "+to_string(seg_res)
+                //     +" end: "+to_string(end()) +" key: "+to_string(key)
+                //     +" \npos_start: "+to_string(position_start)
+                //     +" hash: "+to_string(randstrobes[position_start].hash)
+                //     +" top_n: "+to_string(top_N);
+                //     throw BadParameter(err.c_str());
+                // }
+                return end();
+            }
+        }
+        // if(seg_res != end()){
+        //     string err = "4. seg not equal end: res: "+to_string(seg_res)+" "+to_string(end());
+        //     throw BadParameter(err.c_str());
+        // }
+        return end();
+    }
+    auto cmp = [](const RefRandstrobe lhs, const RefRandstrobe rhs) {return lhs.hash < rhs.hash; };
+
+    auto pos = std::lower_bound(randstrobes.begin() + position_start,
+                                            randstrobes.begin() + position_end,
+                                            RefRandstrobe{key, 0, 0},
+                                            cmp);
+    if (pos->hash == key) {
+        // if(seg_res != pos - randstrobes.begin()){
+        //     string err = "5. seg not equal end: "+to_string(key)+" "+to_string(seg_res)+" "+to_string(pos - randstrobes.begin());
+        //     throw BadParameter(err.c_str());
+        // }
+        return pos - randstrobes.begin();
+    }
+    // if(seg_res != end()){
+    //     string err = "6. seg not equal end: "+to_string(seg_res)+" "+to_string(end());
+    //     throw BadParameter(err.c_str());
+    // }
+    return end();
+    */
 }
 
 unsigned int StrobemerIndex::get_count(bucket_index_t position) const {
@@ -171,12 +230,56 @@ unsigned int StrobemerIndex::get_count(bucket_index_t position) const {
     // logger.debug()<<"last pos: "<<last_pos<<endl;
     // uint64_t seg_count = last_pos - position + 1;
     // logger.debug()<<"count val: "<<seg_count<<endl;
+
     uint64_t lastPos = position + 1;
     uint64_t seg_count = 1;
     uint64_t query_hash = randstrobes[position].hash;
     while(randstrobes[lastPos++].hash == query_hash) seg_count++;
     return seg_count;
     
+    
+    // return seg_dict.GetCount(randstrobes, position);
+    
+    // uint64_t seg_count = seg_dict.GetCount(randstrobes, position);
+    // return seg_count;
+    
+    /*constexpr unsigned int MAX_LINEAR_SEARCH = 8;
+    const auto key = randstrobes[position].hash;
+    const unsigned int top_N = key >> (64 - bits);
+    bucket_index_t position_end = randstrobe_start_indices[top_N + 1];
+    uint64_t count = 1;
+
+    if (position_end - position < MAX_LINEAR_SEARCH) {
+        for (bucket_index_t position_start = position + 1; position_start < position_end; ++position_start) {
+            if (randstrobes[position_start].hash == key){
+                count += 1;
+            }
+            else{
+                break;
+            }
+        }
+        // if(seg_count != count){
+        //     string err = "1. get count not equal: seg_count: "+to_string(seg_count)+" act: "+to_string(count)+"\npos: "
+        //         + to_string(position);
+        //         // +" last pos: "+to_string(last_pos);
+        //     throw BadParameter(err.c_str());
+        // }
+        return count;
+    }
+    auto cmp = [](const RefRandstrobe lhs, const RefRandstrobe rhs) {return lhs.hash < rhs.hash; };
+
+    auto pos = std::upper_bound(randstrobes.begin() + position,
+                                            randstrobes.begin() + position_end,
+                                            RefRandstrobe{key, 0, 0},
+                                            cmp);
+    // if(seg_count != (pos - randstrobes.begin() - 1) - position + 1){
+    //     string err = "2. get count not equal: "+to_string(seg_count)+" "+to_string((pos - randstrobes.begin() - 1) - position + 1)+"\npos: "
+    //             + to_string(position);
+    //             // +" last pos: "+to_string(last_pos);
+    //     throw BadParameter(err.c_str());
+    // }
+    return (pos - randstrobes.begin() - 1) - position + 1;
+    */
 }
 
 void StrobemerIndex::populate(float f, size_t n_threads) {
@@ -207,10 +310,13 @@ void StrobemerIndex::populate(float f, size_t n_threads) {
     logger.debug() << "  Sorting ...\n";
     // sort by hash values
     pdqsort_branchless(randstrobes.begin(), randstrobes.end());
-    stats.elapsed_sorting_seeds = sorting_timer.duration(); 
+    stats.elapsed_sorting_seeds = sorting_timer.duration();
+
+
+    
     logger.debug() << "  Indexing ...\n";
     Timer hash_index_timer;    
-    rs_pla_index.build_rep_stretch_pla_index_strobe(randstrobes);
+    rs_pla_index.build_rep_stretch_pla_index(randstrobes, 8); //lookup - 8; 16 also works just fine
     stats.elapsed_hash_index = hash_index_timer.duration();
 
     uint64_t tot_high_ab = 0;
@@ -294,12 +400,16 @@ void StrobemerIndex::populate(float f, size_t n_threads) {
 
 void StrobemerIndex::check(){
     // logger.debug()<<"Checking...\n";
-    // uint64_t pos = find(275679556624);
+    // uint64_t pos = 180;
     // uint64_t count = get_count(pos);
-    for(uint64_t i=0; i<randstrobes.size(); i++){
-        uint64_t pos = find(randstrobes[i].hash);
-        // uint64_t count = get_count(pos);
-    }
+    // size_t found = find(197857398114);
+    // logger.debug()<<"Found: "<<found<<endl;
+    // logger.debug()<<"vat at found: "<<randstrobes[found].hash<<endl;
+    // for(uint64_t i=179; i<randstrobes.size(); i++){
+    //     // cout<<i<<endl;
+    //     uint64_t pos = find(randstrobes[i].hash);
+    //     // uint64_t count = get_count(pos);
+    // }
     // logger.debug()<<"Check complete\n";
     // exit(0);
 }

@@ -198,7 +198,7 @@ int run_strobealign(int argc, char **argv) {
     if (references.total_length() == 0) {
         throw InvalidFasta("No reference sequences found");
     }
-    // ofstream runinfo("strobemer_info_new_all.txt", ios_base::app);
+    ofstream runinfo("strobemer_info_new_all.txt", ios_base::app);
     StrobemerIndex index(references, index_parameters, opt.bits, opt.eps);
     if (opt.use_index) {
         // Read the index from a file
@@ -227,8 +227,8 @@ int run_strobealign(int argc, char **argv) {
         logger.info() << "  Time generating hash table index: " << index.stats.elapsed_hash_index.count() << " s" <<  std::endl;
         logger.info() << "Total time indexing: " << index_timer.elapsed() << " s\n";
 
-        // runinfo << "  Time generating hash table index: " << index.stats.elapsed_hash_index.count() << " s" <<  std::endl;
-        // runinfo << "Total time indexing: " << index_timer.elapsed() << " s\n";
+        runinfo << "  Time generating hash table index: " << index.stats.elapsed_hash_index.count() << " s" <<  std::endl;
+        runinfo << "Total time indexing: " << index_timer.elapsed() << " s\n";
 
         logger.debug()
             << "Index statistics\n"
@@ -334,7 +334,7 @@ int run_strobealign(int argc, char **argv) {
         << "Total time base level alignment (ssw): " << tot_statistics.tot_extend.count() / opt.n_threads << " s." << std::endl
         << "Total time writing alignment to files: " << tot_statistics.tot_write_file.count() << " s." << std::endl;
 
-    // runinfo << "Total time mapping: " << map_align_timer.elapsed() << " s." << std::endl;
+    runinfo << "Total time mapping: " << map_align_timer.elapsed() << " s." << std::endl;
     return EXIT_SUCCESS;
 }
 

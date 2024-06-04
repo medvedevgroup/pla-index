@@ -274,6 +274,56 @@ class dac_vector_dp
             return m_data[level][i];
         }
 
+        // Added by Hasin
+        inline std::pair<uint64_t, value_type> access_element(size_type i) const
+        {
+            size_t level = 0, offset = m_offsets[level];
+            while (m_overflow[offset + i]) {
+                i = m_overflow_rank(offset + i) - m_overflow_rank(offset);
+                level++;
+                offset = m_offsets[level];
+            }
+            i -= m_overflow_rank(offset + i) - m_overflow_rank(offset);
+            return std::make_pair(level, m_data[level][i]);
+        }
+
+        inline void get_bit_per_level(std::vector<uint64_t>& level_vec){
+            level_vec.resize(levels());
+            for(size_t i=0; i<levels(); i++){
+                level_vec[i] = m_data[i].width();
+            }
+        }
+
+        /**
+         * Get bit width of the number of elements at each level in the parameter vector
+        */
+        inline void get_log_elm_per_level(std::vector<uint64_t>& elm_vec){
+            elm_vec.resize(levels());
+            for(size_t i=0; i<levels(); i++){
+                if(ceil(log2(m_data[i].size())) != floor(log2(m_data[i].size()))){
+                    elm_vec[i] = ceil(log2(m_data[i].size()));
+                }
+                else{
+                    elm_vec[i] = ceil(log2(m_data[i].size())) + 1;
+                }
+                
+            }
+        }
+
+        inline uint64_t get_bit_at_level(uint64_t i){
+            return m_data[i].width();
+        }
+
+        inline uint64_t get_size_at_level(uint64_t i){
+            return m_data[i].size();
+        }
+
+        inline void print_size_at_each_level(){
+            for(size_t i=0; i<levels(); i++){
+                std::cout<<uint64_t(m_data[i].width())<<" : "<< m_data[i].size()<<std::endl;
+            }
+        }
+
         //! Serializes the dac_vector to a stream.
         size_type serialize(std::ostream& out, structure_tree_node* v=nullptr,
                 std::string name="") const {
