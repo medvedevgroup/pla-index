@@ -1,6 +1,6 @@
 # Reproducibility Information
-
-`Refseq_dataset.csv` file contains the RefSeq IDs, Kingdom, alpha and beta values of `Table 5` from our paper.
+This README describes how to reproduce the experiments related to PLA-complexity that are included in our biorxiv preprint.
+`Refseq_dataset.csv` file contains the RefSeq IDs, Kingdom, alpha and beta values of `Table 5`.
 `RefseqID_7Genomes.pdf` contains the RefSeq IDs of the genomes from `Table 6`.
 `RefSeq_ID_List.txt` contains the RefSeq IDs of the 549 genomes that were used for analyzing the pla-complexity.
 
