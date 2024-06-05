@@ -78,7 +78,7 @@ OPTIONS:
     -o [STRING], --index=[STRING]
                 File name where to save the index. [default: genome_fasta.index]
     -l [INT], --lookup=[INT]
-                On average on how many elements the binary search on X array will take place. Used to determine the prefix lookup table. [default: 16]
+                The average number of elements that will be searched on the X array. It is used to determine the size of the prefix lookup table. [default: 16]
     -r            Construct an extra bitvector with the same length as the suffix array.
                 Use this to speed up rank queries. [default: disabled]
 ```
