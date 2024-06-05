@@ -1,4 +1,9 @@
-# Requirements
+# Reproducibility
+
+We used PGM-index commit number `a4b7a2b` and Sapling commit number `4bbe08e` for suffix array `search` query in our paper.
+In addition to the human genome (HG38), we have used Gorilla genome (RefSeq Accession GCF_029281585.1) and C.elegans genome (RefSeq Accession GCF_000002985.6) for our experiements.
+
+## Requirements
 
 In addition to the requirements already stated, one will also need the followings:
 

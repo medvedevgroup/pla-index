@@ -213,7 +213,6 @@ public:
     void encode_values_repeat(const vector<uint64_t> &brk_kval_vec, 
             sdsl::dac_vector_dp<> &sa_diff_dac_vec,
             int64_t lookup_count){
-        vector<uint64_t> prefix_lookup_vec, level_counter;
         sdsl::bit_vector dac_bv(index_size);
         
         if(lookup_count > index_size) lookup_count = 1;
