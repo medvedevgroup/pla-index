@@ -116,8 +116,6 @@ OPTIONS:
                 appears, but it might not be the very first spot. [default: search]
 ```
 
-## Suffix Array
-
 To build the suffix array:
 
 ```shell
@@ -144,7 +142,7 @@ cd build/
 
 The built suffix array is written on `tests/ecoli/ecoli.sa.bin`.
 
-To build a `basic-pla` index with `21` size k-mer, default epsilon value (`15`), default average number of elements (`16`) on which the binary search on X array will take place per query and not creating a bit vector for faster rank query afterwards, we will use the formatted fasta file and the built suffix array:
+To build a `basic-pla` index with default parameters (k=`21`, eps = `15`), we will use the formatted fasta file and the built suffix array:
 
 ```shell
 ./build_pla_index -g ../tests/ecoli/ecoli.processed.fasta -s ../tests/ecoli/ecoli.sa.bin -o ../tests/ecoli/ecoli.index
@@ -162,8 +160,10 @@ The query time will be shown on console.
 
 ## Reproducibility
 
-To reproduce the results from PLA-index, one can follow the `README` file inside the [Reproducibility](Reproducibility/README.md) folder.
-For reproducing the PLA-Complexity results, follow the `README` file inside the [Reproducibility-PLA-Complexity](Reproducibility-PLA-Complexity/README.md) folder.
+
+To reproduce the results related to the evaluation of the PLA-index, please follow the `README` file inside the [Reproducibility](Reproducibility/README.md) folder.
+To reproduce the results related to the PLA complexity of various datasets, please follow the `README` file inside the [Reproducibility-PLA-Complexity](Reproducibility-PLA-Complexity/README.md) folder.
+
 
 ## Citation
 
