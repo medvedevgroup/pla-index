@@ -646,20 +646,20 @@ public:
                 pos = lo*x_total_width;
                 for (int64_t i = lo; i <= hi; i++)
                 {
-                    block = pos >> 6;
-                    shift = pos & 63;
+                    // block = pos >> 6;
+                    // shift = pos & 63;
                     curr_x = get_val(pos, x_mask1, x_mask2, x_width1, x_width2);
                     // curr_x = shift + x_width <= 64
                     //     ? x_enc_vec[block] >> shift & x_mask
                     //     : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & x_mask);
                     curr_x = get_signed_value(curr_x) + mdr;
-                    // if(DEBUG_PRINT){
-                    //     cout<<i<<" "<<lo<<" "<<hi<<" "<<x_total_width<<" "<<pos<<" "
-                    //     <<curr_x<<" "<<query_val<<endl;
-                    // }
+                    if(DEBUG_PRINT){
+                        cout<<i<<" "<<lo<<" "<<hi<<" "<<x_total_width<<" "
+                        <<uint64_t(curr_x)<<" "<<uint64_t(query_val)<<endl;
+                    }
                     
                     if(curr_x >= query_val) {
-                        pos += x_width;
+                        // pos += x_width;
                         block = pos >> 6;
                         shift = pos & 63;
                         rest_val = shift + rest_bits <= 64
@@ -694,7 +694,7 @@ public:
                         return;
                     }
                     prev_x = curr_x;
-                    pos += x_total_width;
+                    pos += rest_bits;
                     mdr += max_data_ratio;
                 }
                 cout<<"Not found\n";
@@ -720,7 +720,7 @@ public:
             //     cout<<mid<<" "<<midVal<<" "<<query_val<<endl;
             
             if (midVal == query_val) {
-                pos += x_width;
+                // pos += x_width;
                 block = pos >> 6;
                 shift = pos & 63;
                 rest_val = shift + rest_bits <= 64
@@ -742,7 +742,7 @@ public:
                 //     : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & x_mask);
                 bv.x2_x1  = get_signed_value(bv.x2_x1) + mdr+ max_data_ratio - midVal;
                 
-                pos += x_width;
+                // pos += x_width;
                 block = pos >> 6;
                 shift = pos & 63;
                 rest_val = shift + rest_bits <= 64
@@ -810,10 +810,10 @@ public:
             ?   prefix_vec[block]>>shift & pref_mask
             :   (prefix_vec[block]>>shift) | (prefix_vec[block+1] << (64-shift) & pref_mask);
         
-        DataType x2, extra, diff2, mdr = max_data_ratio*indx1;
+        DataType x2, extra, mdr = max_data_ratio*indx1;
         uint64_t rest_bits = x_const_width - x_width;
         uint64_t rest_mask = (1ULL << rest_bits)-1;
-        uint64_t rest_val;
+        uint64_t rest_val, diff2;
 
         if(indx1 > 0){
             pos = (indx1-1) * x_const_width;
@@ -835,14 +835,15 @@ public:
         bv.ef1 = rest_val & ef_mask;
         bv.diff1 = rest_val >> ef_width;
 
-        // if(DEBUG_PRINT){
-        //     cout<<"Before match\n"
-        //         <<"prefix index 1: "<<indx1<<" index 2: "<<indx2<<endl
-        //         <<"bv x1: "<<bv.x1<<" ef1: "<<bv.ef1<<" diff1: "<<bv.diff1<<endl;
-        //     if(indx1 > 0){
-        //         cout<<"x2: "<<x2<<" extra: "<<extra<<" diff2: "<<diff2<<endl;
-        //     }
-        // }
+        if(DEBUG_PRINT){
+            cout<<"Before match\n"
+                <<"prefix index 1: "<<indx1<<" index 2: "<<indx2<<endl
+                <<"bv x1: "<<uint64_t(bv.x1)<<" ef1: "<<uint64_t(bv.ef1)
+                    <<" diff1: "<<uint64_t(bv.diff1)<<endl;
+            if(indx1 > 0){
+                cout<<"x2: "<<uint64_t(x2)<<" extra: "<<uint64_t(extra)<<" diff2: "<<diff2<<endl;
+            }
+        }
 
         if(bv.x1 == query_val){
             query_pred = y_range_beg.access(indx1, bv.ef1, ef_width) - epsilon;
@@ -920,7 +921,7 @@ public:
                     if(curr_x > query_val) {
                         if(prev_x != -1){
                             bv.x1 = prev_x;
-                            pos -= rest_bits;
+                            pos -= x_total_width;
                             block = pos >> 6;
                             shift = pos & 63;
                             rest_val = shift + rest_bits <= 64
@@ -947,7 +948,7 @@ public:
                         return;
                     }
                     prev_x = curr_x;
-                    pos += x_total_width;
+                    pos += rest_bits;
                     mdr += max_data_ratio;
                 }
                 // this case only happens for the last k-mer
@@ -955,7 +956,7 @@ public:
                 if(curr_x == query_val){
                     bv.x1 = curr_x;
                     bv.x2_x1 = 1; // actually 0, set 1 for not zero division (dummy)
-                    pos -= rest_bits;
+                    pos -= x_total_width;
                     block = pos >> 6;
                     shift = pos & 63;
                     // curr_x = shift + x_width <= 64
@@ -993,7 +994,7 @@ public:
             // if(DEBUG_PRINT)
             //     cout<<mid<<" "<<midVal<<" "<<query_val<<endl;
             if (midVal == query_val) {
-                pos += x_width;
+                // pos += x_width;
                 block = pos >> 6;
                 shift = pos & 63;
                 rest_val = shift + rest_bits <= 64
