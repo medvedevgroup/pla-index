@@ -47,7 +47,7 @@ int main(int argc, char **argv){
     suffix_array<int64_t> sa;
     sa.Load(gn_fn, sa_fn);
 
-    pla_index pla(is_rank_query);
+    pla_index<int64_t> pla(is_rank_query);
     pla.Load(indx_fn, sa);
 
     std::vector<std::string> query_kmers_vec;

@@ -24,10 +24,18 @@ enum INDX_TYPE {BASIC_PLA, REPEAT_PLA};
 #define DEBUG_PRINT 0
 #define KNOT_BS_THRES 64
 
+template<typename T>
+using SignType = typename std::conditional_t<(sizeof(T) < 8), 
+                        int64_t, __int128>;
+
+template<typename X>
 class pla_index{
 private:
     using canonical_segment = typename OptimalPiecewiseLinearModel<int64_t, uint64_t>::CanonicalSegment;
-    int64_t epsilon, max_data_ratio, lp_bits;
+    using DataType = SignType<X>;
+    
+    DataType max_data_ratio;
+    int64_t epsilon, lp_bits;
     uint64_t shift_bits, index_size, total_data_points, 
         x_width, ef_width, y_diff_width, pref_width, x_const_width,
         num_dac_levels, dac_width;
@@ -45,7 +53,7 @@ private:
     // extra: basic-pla: ef2
     //      : repeat-pla: is_level_sec
     struct brkpnt_values{
-        int64_t x1, diff1, ef1, extra, 
+        DataType x1, diff1, ef1, extra, 
             x2_x1, brkpnt;
     };
     
@@ -78,8 +86,8 @@ public:
         }
     }
 
-    void enc_value(uint64_t v, vector<uint64_t> &m_bits, const uint64_t& mask, uint64_t& width,
-            uint64_t &m_cur_block, uint64_t &m_cur_shift){
+    void enc_value_64(DataType v, vector<uint64_t> &m_bits, const uint64_t mask, 
+            uint64_t width, uint64_t &m_cur_block, uint64_t &m_cur_shift){
         m_bits[m_cur_block] &= ~(mask << m_cur_shift);
         m_bits[m_cur_block] |= v << m_cur_shift;
 
@@ -101,9 +109,26 @@ public:
         }
     }
 
+    void enc_value(DataType v, vector<uint64_t> &m_bits, uint64_t width, 
+            uint64_t &m_cur_block, uint64_t &m_cur_shift){
+        uint64_t rest_width = 0;
+        uint64_t mask;
+        if(width > 64){
+            rest_width = width - 64;
+            width = 64;
+        }
+        mask = (1ULL << width) - 1;
+        enc_value_64(v & mask, m_bits, mask, width, m_cur_block, m_cur_shift);
 
-    void encode_values_basic(const vector<uint64_t> &brk_kval_vec, 
-        const vector<uint64_t> &brk_diff_vec, int64_t lookup_count){
+        if(rest_width > 0){
+            mask = (1ULL << rest_width) - 1;
+            enc_value_64(v >> width, m_bits, mask, rest_width, m_cur_block, m_cur_shift);
+        }
+    }
+
+
+    void encode_values_basic(const vector<DataType> &brk_kval_vec, 
+        const vector<uint32_t> &brk_diff_vec, int64_t lookup_count){
         
         if(lookup_count > index_size) lookup_count = 1;
 
@@ -118,11 +143,11 @@ public:
                 <<" total bits: "<<max_bits
                 <<endl;
         }
-        uint64_t largest = 0;
+        DataType largest = 0;
 
         for(int64_t i=0; i<index_size; i++){
-            int64_t diff = int64_t(brk_kval_vec[i]) - i*max_data_ratio;
-            uint64_t val = add_bit_based_on_sign(diff);
+            DataType diff = brk_kval_vec[i] - i*max_data_ratio;
+            DataType val = add_bit_based_on_sign(diff);
             if(val > largest) largest = val;
         }
         
@@ -143,74 +168,75 @@ public:
             return (1ULL << n) - 1;
         };
 
-        const uint64_t y_diff_mask = get_mask(y_diff_width);
-        const uint64_t x_mask = get_mask(x_width);
-        const uint64_t pref_mask = get_mask(pref_width);
-        const uint64_t ef_mask = get_mask(ef_width);
+        // const uint64_t y_diff_mask = get_mask(y_diff_width);
+        // const uint64_t x_mask = get_mask(x_width);
+        // const uint64_t pref_mask = get_mask(pref_width);
+        // const uint64_t ef_mask = get_mask(ef_width);
 
         x_const_width = x_width + ef_width + y_diff_width;
 
-        if(DEBUG_PRINT){
-            cout<<"width\n"
-                <<"x: "<<x_width
-                <<" y_diff: "<<y_diff_width
-                <<" pref: "<<pref_width
-                <<" ef: "<<ef_width
-                <<" x_const_width: "<<x_const_width
-                <<" max data ratio: "<<max_data_ratio
-                <<" largest: "<<largest
-                <<endl;
-        }
+        // if(DEBUG_PRINT){
+        //     cout<<"width\n"
+        //         <<"x: "<<x_width
+        //         <<" y_diff: "<<y_diff_width
+        //         <<" pref: "<<pref_width
+        //         <<" ef: "<<ef_width
+        //         <<" x_const_width: "<<x_const_width
+        //         <<" max data ratio: "<<max_data_ratio
+        //         <<" largest: "<<largest
+        //         <<endl;
+        // }
 
         
 
-        uint64_t prefix_count=0, x_enc_block = 0, x_enc_shift = 0, 
+        uint64_t x_enc_block = 0, x_enc_shift = 0, 
             prefix_enc_block=0, prefix_enc_shift=0;
+        DataType  prefix_count=0;
         
         x_enc_vec.push_back(0);
         prefix_vec.push_back(0);
 
         for(int64_t i=0; i<index_size; i++){
-            int64_t diff = int64_t(brk_kval_vec[i]) - i*max_data_ratio;
-            uint64_t val = add_bit_based_on_sign(diff);
+            DataType diff = brk_kval_vec[i] - i*max_data_ratio;
+            DataType val = add_bit_based_on_sign(diff);
 
-            enc_value(val, x_enc_vec, x_mask, 
+            enc_value(val, x_enc_vec,
                 x_width, x_enc_block, x_enc_shift);
 
             enc_value(y_range_beg.cv_access(i), x_enc_vec, 
-                ef_mask, ef_width, x_enc_block, x_enc_shift);
+                 ef_width, x_enc_block, x_enc_shift);
             
-            enc_value(brk_diff_vec[i], x_enc_vec, y_diff_mask, 
+            enc_value(brk_diff_vec[i], x_enc_vec, 
                 y_diff_width, x_enc_block, x_enc_shift);
 
-            if(DEBUG_PRINT){
-                if(i > 1635555 && i < 1635558){
-                    cout<<i<<" x_val: "<<brk_kval_vec[i]
-                        <<" cv val: "<<y_range_beg.cv_access(i)
-                        <<" y_start[]: "<<y_range_beg.access(i, 
-                                    y_range_beg.cv_access(i), ef_width)
-                        <<" diff: "<<brk_diff_vec[i]
-                        <<endl;
-                }
-            }
-            
-            int64_t lp_bit_value = brk_kval_vec[i] >> shift_bits;
+            // if(DEBUG_PRINT){
+            //     if(i > 1635555 && i < 1635558){
+            //         cout<<i<<" x_val: "<<brk_kval_vec[i]
+            //             <<" cv val: "<<y_range_beg.cv_access(i)
+            //             <<" y_start[]: "<<y_range_beg.access(i, 
+            //                         y_range_beg.cv_access(i), ef_width)
+            //             <<" diff: "<<brk_diff_vec[i]
+            //             <<endl;
+            //     }
+            // }
+            // lp bit value should never need to be 128 bits
+            DataType lp_bit_value = brk_kval_vec[i] >> shift_bits;
             if(prefix_count <= lp_bit_value){
-                for(int64_t pl=prefix_count; pl<lp_bit_value+1; pl++){
+                for(DataType pl=prefix_count; pl<lp_bit_value+1; pl++){
                     prefix_count++;
-                    enc_value(i, prefix_vec, pref_mask, pref_width, 
+                    enc_value(i, prefix_vec, pref_width, 
                         prefix_enc_block, prefix_enc_shift);
                 }
             }
         }
 
         // this ensures upto index_size-1 will be checked for the last entry
-        enc_value(index_size-1, prefix_vec, pref_mask, pref_width, 
+        enc_value(index_size-1, prefix_vec,  pref_width, 
             prefix_enc_block, prefix_enc_shift);
     }
     
     
-    void encode_values_repeat(const vector<uint64_t> &brk_kval_vec, 
+    void encode_values_repeat(const vector<DataType> &brk_kval_vec, 
             sdsl::dac_vector_dp<> &sa_diff_dac_vec,
             int64_t lookup_count){
         sdsl::bit_vector dac_bv(index_size);
@@ -222,7 +248,7 @@ public:
         
         uint64_t max_bits = shift_bits + lp_bits;
         ef_width = y_range_beg.cv_width();
-        const uint64_t ef_mask = (1ULL << ef_width) - 1;
+        
         
         dac_width = 1; // 1st level
         const uint64_t dac_mask = 1;
@@ -233,24 +259,22 @@ public:
         }
         
         max_data_ratio = ((1ULL << (max_bits)) - 1)/(index_size - 1);
-        uint64_t largest = 0;
+        DataType largest = 0;
         for(int64_t i=0; i<index_size; i++){
-            int64_t diff = int64_t(brk_kval_vec[i]) - i*max_data_ratio;
-            uint64_t val = add_bit_based_on_sign(diff);
+            DataType diff = brk_kval_vec[i] - i*max_data_ratio;
+            DataType val = add_bit_based_on_sign(diff);
             if(val > largest) {
                 largest = val;
             }
         }
         if(ceil(log2(largest)) == floor(log2(largest))) x_width = ceil(log2(largest)) + 1;
         else x_width = ceil(log2(largest));
-        const uint64_t x_mask = (1ULL << x_width) -1;
-        if(DEBUG_PRINT)
-            cout<<"x_width: "<<x_width<<" "<<largest<<endl;
+        
+        // if(DEBUG_PRINT)
+        //     cout<<"x_width: "<<x_width<<" "<<largest<<endl;
 
         if(ceil(log2(index_size-1)) == floor(log2(index_size-1))) pref_width = ceil(log2(index_size-1)) + 1;
         else pref_width = ceil(log2(index_size-1));
-
-        const uint64_t pref_mask = (1ULL << pref_width) - 1;
 
         // gets the bit width at each level, and the corresponding mask 
         process_level_vec(sa_diff_dac_vec);
@@ -285,10 +309,10 @@ public:
         // x + bit_for_2nd_level + ef_width + 1st level dac
         x_const_width = x_width + 1 + ef_width + dac_level_width_vec[0];
         
-        uint64_t curr_kval_position, prev_level = 0, prefix_count=0;
+        DataType prefix_count=0;
         uint64_t x_enc_block = 0, x_enc_shift = 0, prefix_enc_block=0, prefix_enc_shift=0,
             dac_enc_block = 0, dac_enc_shift = 0;
-        uint64_t slope_width = 1, slope_mask = 1;
+        
         const uint64_t dac_0_mask = (1ULL << dac_level_width_vec[0]) - 1;
         if(DEBUG_PRINT)
             cout<<"DAC mask: "<<dac_mask<<" width: "<<dac_width<<endl;
@@ -297,24 +321,25 @@ public:
         prefix_vec.push_back(0);
         for(size_t i=0; i<index_size; i++){
             
-            int64_t diff = int64_t(brk_kval_vec[i]) - i*max_data_ratio;
-            uint64_t val = add_bit_based_on_sign(diff);
+            DataType diff = brk_kval_vec[i] - i*max_data_ratio;
+            DataType val = add_bit_based_on_sign(diff);
             uint64_t curr_level = 0;
             
-            enc_value(val, x_enc_vec, x_mask, x_width, x_enc_block, x_enc_shift);
+            enc_value(val, x_enc_vec, x_width, x_enc_block, x_enc_shift);
             
             //enc whether to go to 2nd level
             auto [level, element] = sa_diff_dac_vec.access_element(i);
             uint64_t enc_level = level > curr_level ? 1:0;
-            enc_value(enc_level, x_enc_vec, dac_mask, dac_width, x_enc_block, x_enc_shift);
+            enc_value(enc_level, x_enc_vec, dac_width, x_enc_block, x_enc_shift);
             
             dac_bvs[curr_level][i] = enc_level; // either 0 or 1
 
-            enc_value(y_range_beg.cv_access(i), x_enc_vec, ef_mask, ef_width, x_enc_block, x_enc_shift);
+            enc_value(y_range_beg.cv_access(i), x_enc_vec, ef_width, x_enc_block, 
+                    x_enc_shift);
             
             // encode lsbs of all level dac
             enc_value(sa_diff_dac_vec[i]&dac_0_mask, x_enc_vec, 
-                dac_0_mask, dac_level_width_vec[0], x_enc_block, x_enc_shift);
+                dac_level_width_vec[0], x_enc_block, x_enc_shift);
             
             if(level > 0){
                 // loop to iterate over the level and dac value
@@ -328,7 +353,7 @@ public:
                     curr_level++;
                     enc_level = level > curr_level ? 1:0;
                     uint64_t dac_mask = (1ULL<<dac_level_width_vec[curr_level])-1;
-                    enc_value(val & dac_mask, dac_level_vecs[curr_level-1], dac_mask,
+                    enc_value(val & dac_mask, dac_level_vecs[curr_level-1], 
                         dac_level_width_vec[curr_level], dac_level_block_vec[curr_level-1], dac_level_shift_vec[curr_level-1]);
                     
                     if(curr_level < num_dac_levels-1){
@@ -345,25 +370,26 @@ public:
                     val >>= dac_level_width_vec[curr_level];
                 }
             }
-            if(DEBUG_PRINT && i>=21428909 && i<=21428912){
-                cout<<i<<" x: "<<(brk_kval_vec[i])<<" y_start: "
-                    <<y_range_beg.access(i, y_range_beg.cv_access(i), ef_width)<<" "
-                    <<" cv: "<<y_range_beg.cv_access(i)<<" lvl: "
-                    <<level<<" diff1: "
-                    <<sa_diff_dac_vec[i]<<" y_end: "
-                    <<y_range_beg.access(i, y_range_beg.cv_access(i), ef_width) + sa_diff_dac_vec[i]
-                    <<endl;
-            }
-            int64_t lp_bit_value = (brk_kval_vec[i]) >> shift_bits;
+            // if(DEBUG_PRINT && i>=21428909 && i<=21428912){
+            //     cout<<i<<" x: "<<(brk_kval_vec[i])<<" y_start: "
+            //         <<y_range_beg.access(i, y_range_beg.cv_access(i), ef_width)<<" "
+            //         <<" cv: "<<y_range_beg.cv_access(i)<<" lvl: "
+            //         <<level<<" diff1: "
+            //         <<sa_diff_dac_vec[i]<<" y_end: "
+            //         <<y_range_beg.access(i, y_range_beg.cv_access(i), ef_width) + sa_diff_dac_vec[i]
+            //         <<endl;
+            // }
+            DataType lp_bit_value = (brk_kval_vec[i]) >> shift_bits;
             if(prefix_count <= lp_bit_value){
-                for(int64_t pl=prefix_count; pl<lp_bit_value+1; pl++){
+                for(DataType pl=prefix_count; pl<lp_bit_value+1; pl++){
                     prefix_count++;
-                    enc_value(i, prefix_vec, pref_mask, pref_width, prefix_enc_block, prefix_enc_shift);
+                    enc_value(i, prefix_vec, pref_width, prefix_enc_block, 
+                        prefix_enc_shift);
                 }
             }
         }
         // this ensures upto index_size-1 will be checked for the last entry
-        enc_value(index_size-1, prefix_vec, pref_mask, pref_width, prefix_enc_block, prefix_enc_shift);
+        enc_value(index_size-1, prefix_vec, pref_width, prefix_enc_block, prefix_enc_shift);
 
         for(size_t i=0; i<dac_sd_vecs.size(); i++){
             sdsl::sd_vector<> sd(dac_bvs[i]);
@@ -375,9 +401,9 @@ public:
     // uint64_t get_size_in_bytes();
     inline uint64_t get_num_segments() const {return index_size;}
     
-    template <typename DataType>
-    uint64_t get_first_index(int64_t idx, const uint64_t query_val, 
-            const DataType &data) const{
+    template <typename SortedArray>
+    uint64_t get_first_index(int64_t idx, const DataType query_val, 
+            const SortedArray &data) const{
         if(!is_fast_rank){
             while(1){
                 if(--idx < 0) return data.get_sa_val(0);
@@ -405,8 +431,8 @@ public:
     }
 
     // suffix array version
-    template <typename DataType>
-    void Save(string indx_fn, DataType& data){
+    template <typename SortedArray>
+    void Save(string indx_fn, SortedArray& data){
         std::ofstream os(indx_fn, std::ios::binary);
         /**
          * Set flags x 
@@ -465,8 +491,8 @@ public:
     }
     
     // suffix array version
-    template <typename DataType>
-    void Load(string indx_fn, DataType &data){
+    template <typename SortedArray>
+    void Load(string indx_fn, SortedArray &data){
         /**
          * Load flags x 
          * whether indirection settings -> kmer size is stored [nth bit]
@@ -566,36 +592,54 @@ public:
         cout<<"PLA index loaded"<<endl;
     }
 
-    inline int64_t get_signed_value(int64_t value) const{
+    inline DataType get_signed_value(DataType value) const{
         return value & 1
             ? -(value>>1)
             : value>>1;
     }
 
 
-    inline int64_t predict(int64_t q, int64_t x1, int64_t y1, int64_t x2_x1, int64_t y2) const{
+    inline int64_t predict(DataType q, DataType x1, DataType y1, 
+                    DataType x2_x1, DataType y2) const{
         return round(y1 + ((double)(q - x1)/x2_x1 )*(y2 - y1));
     }
 
-    inline uint64_t get_val(uint64_t& pos, const uint64_t& mask, const uint64_t& width) const{
+    inline DataType get_val_64(uint64_t& pos, uint64_t& mask, uint64_t& width) const{
         uint64_t block = pos >> 6;
         uint64_t shift = pos & 63;
         pos += width;
         return shift + width <= 64
                     ? x_enc_vec[block] >> shift & mask
-                    : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & mask);
+                    : (x_enc_vec[block] >> shift) | 
+                        (x_enc_vec[block + 1] << (64 - shift) & mask);
     }
 
-    void binary_search_basic(uint64_t lo, uint64_t hi, const int64_t query_val, 
+    inline DataType get_val(uint64_t& pos, uint64_t& mask1, uint64_t& mask2,
+      uint64_t& width1, uint64_t& width2) const{
+        if(!width2){
+            return get_val_64(pos, mask1, width1);
+        }
+        DataType right = get_val_64(pos, mask1, width1);
+        DataType left = get_val_64(pos, mask2, width2);
+        left <<= 64;
+        return left | right;
+            
+    }
+
+    void binary_search_basic(uint64_t lo, uint64_t hi, const DataType query_val, 
+            uint64_t x_width1, uint64_t x_width2,
             brkpnt_values &bv) const
     {
-        int64_t mid, midVal, pos, rest_val,
+        DataType mid, midVal, rest_val,
             block, shift, prev_x = -1, curr_x, rest_bits = x_const_width - x_width, mdr;
+        uint64_t pos;
         const uint64_t x_total_width = x_width + rest_bits;
-        const uint64_t rest_mask = (1ULL << rest_bits) - 1;
+        uint64_t rest_mask = (1ULL << rest_bits) - 1;
         const uint64_t ef_mask = (1ULL << ef_width) - 1;
-        const uint64_t x_mask = (1ULL << x_width) - 1;
-
+        
+        uint64_t x_mask1 = (1ULL << x_width1) - 1;
+        uint64_t x_mask2 = (1ULL << x_width2) - 1;
+        
         while(1){
             if(hi-lo <= KNOT_BS_THRES){
                 mdr = max_data_ratio * lo;
@@ -604,9 +648,10 @@ public:
                 {
                     block = pos >> 6;
                     shift = pos & 63;
-                    curr_x = shift + x_width <= 64
-                        ? x_enc_vec[block] >> shift & x_mask
-                        : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & x_mask);
+                    curr_x = get_val(pos, x_mask1, x_mask2, x_width1, x_width2);
+                    // curr_x = shift + x_width <= 64
+                    //     ? x_enc_vec[block] >> shift & x_mask
+                    //     : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & x_mask);
                     curr_x = get_signed_value(curr_x) + mdr;
                     // if(DEBUG_PRINT){
                     //     cout<<i<<" "<<lo<<" "<<hi<<" "<<x_total_width<<" "<<pos<<" "
@@ -653,7 +698,7 @@ public:
                     mdr += max_data_ratio;
                 }
                 cout<<"Not found\n";
-                cout<<query_val<<endl;
+                cout<<uint64_t(query_val)<<endl;
                 exit(-1);
             } 
             
@@ -665,9 +710,10 @@ public:
             
             block = pos >> 6;
             shift = pos & 63;
-            midVal = shift + x_width <= 64
-                ? x_enc_vec[block] >> shift & x_mask
-                : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & x_mask);
+            midVal = get_val(pos, x_mask1, x_mask2, x_width1, x_width2);
+            // midVal = shift + x_width <= 64
+            //     ? x_enc_vec[block] >> shift & x_mask
+            //     : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & x_mask);
             midVal = get_signed_value(midVal) + mdr;
 
             // if(DEBUG_PRINT)
@@ -690,9 +736,10 @@ public:
                 pos += rest_bits;
                 block = pos >> 6;
                 shift = pos & 63;
-                bv.x2_x1 = shift + x_width <= 64
-                    ? x_enc_vec[block] >> shift & x_mask
-                    : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & x_mask);
+                bv.x2_x1 = get_val(pos, x_mask1, x_mask2, x_width1, x_width2);
+                // bv.x2_x1 = shift + x_width <= 64
+                //     ? x_enc_vec[block] >> shift & x_mask
+                //     : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & x_mask);
                 bv.x2_x1  = get_signed_value(bv.x2_x1) + mdr+ max_data_ratio - midVal;
                 
                 pos += x_width;
@@ -718,9 +765,9 @@ public:
 
     }
 
-    template <typename DataType>
-    inline int64_t query(const int64_t query_val, 
-        const string &query, const DataType &data) const
+    template <typename SortedArray>
+    inline int64_t query(const DataType query_val, 
+        const string &query, const SortedArray &data) const
     {
         if(indx_type == BASIC_PLA){
             return query_concise_basic_pla(query_val, query, data);
@@ -730,17 +777,24 @@ public:
         }
     }
 
-    template <typename DataType>
-    int64_t query_concise_basic_pla(const int64_t query_val, 
-        const string &query, const DataType &data) const
+    template <typename SortedArray>
+    int64_t query_concise_basic_pla(const DataType query_val, 
+        const string &query, const SortedArray &data) const
     {
-        int64_t query_pred, lo, brkpnt;
+        int64_t query_pred, lo;
         brkpnt_values bv;
         uint64_t lp_bit_value = query_val >> shift_bits;
         const uint64_t ef_mask = (1ULL << ef_width) - 1;
-        const uint64_t x_mask = (1ULL << x_width) - 1;
         const uint64_t y_diff_mask = (1ULL << y_diff_width) - 1;
         const uint64_t pref_mask = (1ULL << pref_width) - 1;
+
+        uint64_t x_width1 = x_width, x_width2 = 0, dummy = 0;
+        if(x_width1 > 64){
+            x_width1 = 64;
+            x_width2 = x_width - 64;
+        }
+        uint64_t x_mask1 = (1ULL << x_width1) - 1;
+        uint64_t x_mask2 = (1ULL << x_width2) - 1;
 
         uint64_t pos = lp_bit_value*pref_width;
         uint64_t block = pos >> 6;
@@ -756,15 +810,16 @@ public:
             ?   prefix_vec[block]>>shift & pref_mask
             :   (prefix_vec[block]>>shift) | (prefix_vec[block+1] << (64-shift) & pref_mask);
         
-        int64_t x2, extra, diff2, mdr = max_data_ratio*indx1;
+        DataType x2, extra, diff2, mdr = max_data_ratio*indx1;
         uint64_t rest_bits = x_const_width - x_width;
-        const uint64_t rest_mask = (1ULL << rest_bits)-1;
+        uint64_t rest_mask = (1ULL << rest_bits)-1;
         uint64_t rest_val;
 
         if(indx1 > 0){
             pos = (indx1-1) * x_const_width;
-            x2 = get_signed_value(get_val(pos, x_mask, x_width)) + mdr - max_data_ratio;
-            rest_val = get_val(pos, rest_mask, rest_bits);
+            x2 = get_signed_value(get_val(pos, x_mask1, x_mask2,
+                    x_width1, x_width2)) + mdr - max_data_ratio;
+            rest_val = get_val(pos, rest_mask, dummy, rest_bits, dummy);
 
             extra = rest_val & ef_mask;
             diff2 = rest_val >> ef_width;
@@ -773,8 +828,9 @@ public:
             pos = indx1 * x_const_width;
         }
 
-        bv.x1 = get_signed_value(get_val(pos, x_mask, x_width)) + mdr;
-        rest_val = get_val(pos, rest_mask, rest_bits);
+        bv.x1 = get_signed_value(get_val(pos, x_mask1, x_mask2,
+                    x_width1, x_width2)) + mdr;
+        rest_val = get_val(pos, rest_mask, dummy, rest_bits, dummy);
 
         bv.ef1 = rest_val & ef_mask;
         bv.diff1 = rest_val >> ef_width;
@@ -794,7 +850,8 @@ public:
         else{
             if(bv.x1 < query_val){
                 // indx2 - 1 should also work fine
-                binary_search_basic(indx1+1, indx2, query_val, bv);
+                binary_search_basic(indx1+1, indx2, query_val, 
+                        x_width1, x_width2, bv);
             }
             else{
                 bv.x2_x1 = bv.x1 - x2;
@@ -832,15 +889,18 @@ public:
     }
 
 
-    void binary_search_repeat(uint64_t lo, uint64_t hi, const int64_t query_val, 
+    void binary_search_repeat(uint64_t lo, uint64_t hi, const DataType query_val, 
+            uint64_t x_width1, uint64_t x_width2,
             brkpnt_values &bv) const
     {
-        int64_t mid, midVal, pos, rest_val,
+        DataType mid, midVal, rest_val,
             block, shift, prev_x = -1, curr_x, rest_bits = x_const_width - x_width, mdr;
+        uint64_t pos;
         const uint64_t x_total_width = x_width + rest_bits;
-        const uint64_t rest_mask = (1ULL << rest_bits) - 1;
+        uint64_t rest_mask = (1ULL << rest_bits) - 1;
         const uint64_t ef_mask = (1ULL << ef_width) - 1;
-        const uint64_t x_mask = (1ULL << x_width) - 1;
+        uint64_t x_mask1 = (1ULL << x_width1) - 1;
+        uint64_t x_mask2 = (1ULL << x_width2) - 1;
         
         while(1){
             if(hi-lo <= KNOT_BS_THRES){
@@ -850,9 +910,7 @@ public:
                 {
                     block = pos >> 6;
                     shift = pos & 63;
-                    curr_x = shift + x_width <= 64
-                        ? x_enc_vec[block] >> shift & x_mask
-                        : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & x_mask);
+                    curr_x = get_val(pos, x_mask1, x_mask2, x_width1, x_width2);
                     curr_x = get_signed_value(curr_x) + mdr;
                     // if(DEBUG_PRINT){
                     //     cout<<i<<" "<<lo<<" "<<hi<<" "<<x_total_width<<" "<<pos<<" "
@@ -922,7 +980,7 @@ public:
                     return;
                 }
                 cout<<"Not found\n";
-                cout<<query_val<<endl;
+                cout<<uint64_t(query_val)<<endl;
                 exit(-1);
             } 
             mid = (lo + hi) >> 1;
@@ -930,9 +988,7 @@ public:
             mdr = max_data_ratio*mid;
             block = pos >> 6;
             shift = pos & 63;
-            midVal = shift + x_width <= 64
-                ? x_enc_vec[block] >> shift & x_mask
-                : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & x_mask);
+            midVal = get_val(pos, x_mask1, x_mask2, x_width1, x_width2);
             midVal = get_signed_value(midVal) + mdr;
             // if(DEBUG_PRINT)
             //     cout<<mid<<" "<<midVal<<" "<<query_val<<endl;
@@ -954,11 +1010,8 @@ public:
                 pos += rest_bits;
                 block = pos >> 6;
                 shift = pos & 63;
-                bv.x2_x1 = shift + x_width <= 64
-                    ? x_enc_vec[block] >> shift & x_mask
-                    : (x_enc_vec[block] >> shift) | (x_enc_vec[block + 1] << (64 - shift) & x_mask);
+                bv.x2_x1 = get_val(pos, x_mask1, x_mask2, x_width1, x_width2);
                 bv.x2_x1  = get_signed_value(bv.x2_x1) + mdr+ max_data_ratio - midVal;
-                // TODO: Update to direct check
                 
                 // if(DEBUG_PRINT)
                 //     cout<<"ef "<<bv.ef1<<" "<<rest_val<<" "<<bv.diff1<<" "<<bv.x2_x1<<endl;
@@ -974,16 +1027,23 @@ public:
     }
 
 
-    template <typename DataType>
-    int64_t query_concise_repeat_pla(const int64_t &query_val, 
-        const string &query, const DataType &data) const{
-        int64_t query_pred, lo,  brkpnt;
+    template <typename SortedArray>
+    int64_t query_concise_repeat_pla(const DataType &query_val, 
+        const string &query, const SortedArray &data) const{
+        int64_t query_pred;
         brkpnt_values bv;
         uint64_t lp_bit_value = query_val >> shift_bits;
         const uint64_t ef_mask = (1ULL << ef_width) - 1;
-        const uint64_t x_mask = (1ULL << x_width) - 1;
         const uint64_t pref_mask = (1ULL << pref_width) - 1;
         
+        uint64_t x_width1 = x_width, x_width2 = 0, dummy = 0;
+        if(x_width1 > 64){
+            x_width1 = 64;
+            x_width2 = x_width - 64;
+        }
+        uint64_t x_mask1 = (1ULL << x_width1) - 1;
+        uint64_t x_mask2 = (1ULL << x_width2) - 1;
+
         uint64_t pos = lp_bit_value*pref_width;
         uint64_t block = pos >> 6;
         uint64_t shift = pos & 63;
@@ -998,18 +1058,19 @@ public:
             :   (prefix_vec[block]>>shift) | (prefix_vec[block+1] << (64-shift) & pref_mask);
     
         
-        int64_t x2, ef2, diff2,
+        DataType x2, ef2, diff2,
             is_sec_lvl_2, mdr = max_data_ratio*indx;
         
         uint64_t rest_bits = x_const_width - x_width;
-        const uint64_t rest_mask = (1ULL << rest_bits)-1;
+        uint64_t rest_mask = (1ULL << rest_bits)-1;
         uint64_t rest_val;
         
         // s1 = std::chrono::system_clock::now();
         if(indx > 0){
             pos = (indx-1) * x_const_width;
-            x2 = get_signed_value(get_val(pos, x_mask, x_width)) + mdr - max_data_ratio;
-            rest_val = get_val(pos, rest_mask, rest_bits);
+            x2 = get_signed_value(get_val(pos, x_mask1, x_mask2, x_width1, x_width2))
+                     + mdr - max_data_ratio;
+            rest_val = get_val(pos, rest_mask, dummy, rest_bits, dummy);
             is_sec_lvl_2 = rest_val & 1;
 
             ef2 = (rest_val>>1) & ef_mask;
@@ -1019,8 +1080,9 @@ public:
             pos = indx * x_const_width;
         }
         
-        bv.x1 = get_signed_value(get_val(pos, x_mask, x_width)) + mdr;
-        rest_val = get_val(pos, rest_mask, rest_bits);
+        bv.x1 = get_signed_value(get_val(pos, x_mask1, x_mask2, x_width1, x_width2)) 
+                    + mdr;
+        rest_val = get_val(pos, rest_mask, dummy, rest_bits, dummy);
         bv.extra = rest_val & 1;
         bv.ef1 = (rest_val>>1) & ef_mask;
         bv.diff1 = rest_val >> (ef_width + 1);
@@ -1043,7 +1105,8 @@ public:
                 // brkpnt_pair = x_cv.binary_search(ind_pair.first, ind_pair.second, query_val, brkpnt);
                 // TODO: Can be made indx2-1 and lo+1 w/ careful thinking
                 // auto s3 = std::chrono::system_clock::now();
-                binary_search_repeat(indx+1, indx2, query_val, bv);
+                binary_search_repeat(indx+1, indx2, query_val, 
+                    x_width1, x_width2,  bv);
                 // auto s4 = std::chrono::system_clock::now();
                 // portion_sec[3] += (s4-s3);
             }
@@ -1079,61 +1142,24 @@ public:
                     knot_ei |= (temp << total_width);
                     
                     total_width += dac_width;
-                    // if(DEBUG_PRINT){
-                    //     cout<<query<<" level: "<<curr_level<<" knot_ei: "<<knot_ei<<endl;
-                    //     cout<<"dac indx: "<<dac_indx<<" width: "<<dac_width<<" mask: "<<dac_mask<<endl;
-                    //     cout<<"dac temp: "<<temp<<endl;
-                    //     cout<<"total width: "<<total_width<<endl;
-                    //     cout<<"knot ei: "<<knot_ei<<endl;
-                    // }
+                    
                     if(curr_level == num_dac_levels-2 || !dac_sd_vecs[curr_level+1][dac_indx]) break;
                     curr_level++;
                 }
-                // auto dac_indx = rank_support_dac(bv.brkpnt);
-                // cout<<"dac indx: "<<dac_indx<<" brkpnt: "<<bv.brkpnt<<endl;
-                // cout<<"prev one: "<<rank_support_dac(bv.brkpnt-1)<<" next: "<<rank_support_dac(bv.brkpnt+1)<<endl;
-                // auto dac_width_sec = dac_level_width_vec[1];
-                // uint64_t dac_width_mask = dac_level_mask_vec[1];
-                // pos = dac_indx*dac_width_sec;
-                // block = pos >> 6;
-                // shift = pos & 63;
-                // uint64_t dac_sec = (shift + dac_width_sec <= 64) 
-                //     ?   dac_lvl2_vec[block]>>shift & dac_width_mask
-                //     :   (dac_lvl2_vec[block]>>shift) | (dac_lvl2_vec[block+1] << (64-shift) & dac_width_mask);
-                // knot_ei |= (dac_sec<<dac_level_width_vec[0]);
             }
             knot_ei += knot_si;
-            // if(DEBUG_PRINT){
-            //     cout<<"After breakpoint: \n"
-            //     <<bv.x1<<" "<<query_val<<" "<<bv.x1+bv.x2_x1<<" \n"
-            //     <<"si: "<<knot_si<<" ei: "<<knot_ei<<" \n";
-            //     cout<<"brkpnt: "<<bv.brkpnt<<endl;
-            //     cout<<" val_si "<<data.GetKmerValAtSAIndx(knot_si-epsilon)<<
-            //     " val_ei "<<data.GetKmerValAtSAIndx(knot_ei - epsilon)<<" sec_lvl: "
-            //     <<bv.extra<<" "
-            //     <<endl<<endl;
-            // }
             
 
             query_pred = predict(query_val, bv.x1, knot_si, bv.x2_x1, knot_ei) - epsilon;
             
         }
         query_pred = std::clamp(query_pred, int64_t(0), int64_t(total_data_points) - 1);
-        // s2 = std::chrono::system_clock::now();
-        // portion_sec[2] += (s2-s1);
-        // if(DEBUG_PRINT){
-        //     cout<<"pred: "<<query_pred<<endl;
-        // }
-        
-        // s1 = std::chrono::system_clock::now();
+       
         return !is_rank_query
             ? data.BinarySearch(query , max(query_pred - epsilon, int64_t(0)), 
                 min(query_pred + epsilon, int64_t(total_data_points)-1), false)
             : get_first_index(data.BinarySearch(query , max(query_pred - epsilon, int64_t(0)), 
-                min(query_pred + epsilon, int64_t(total_data_points)-1), true), query_val, data);        
-        // s2 = std::chrono::system_clock::now();
-        // portion_sec[4] += (s2-s1);
-        // return res;
+                min(query_pred + epsilon, int64_t(total_data_points)-1), true), query_val, data);     
     }
 
     template<typename RandomIt>
@@ -1217,23 +1243,24 @@ public:
      * @brief add a 1 bit at the end of a negative number, and 
      * 0 at the end of a positive number
     */
-    inline uint64_t add_bit_based_on_sign(int64_t &num){
+    inline DataType add_bit_based_on_sign(DataType &num){
         return num < 0
             ? ((-num)<<1) | 1
             : num << 1;
     }
 
     template<typename RandomIt>
-    void build_basic_pla_index(const RandomIt &begin, 
-        const uint64_t lookup_count,
+    void build_basic_pla_index(const RandomIt &begin, const uint64_t lookup_count,
         int64_t kmer_size){
-        vector<uint64_t>  brk_sa_indx_vec, brk_kval_vec, brk_diff_vec;
+        vector<DataType>  brk_kval_vec;
+        vector<uint64_t> brk_sa_indx_vec;
+        vector<uint32_t> brk_diff_vec;
         bool isFirst = true;
-        int64_t prev_knot_ei=0, diff_from_curr_start;
+        int64_t prev_knot_ei=0;
+        DataType diff_from_curr_start;
         vector<canonical_segment> out(1);
 
         auto in_fun = [&](auto i) { return std::pair<int64_t, uint64_t>(begin[i], i); };
-        int64_t _max = 0, bit_max = 0;
         auto out_fun = [&](auto cs, const int64_t last_x) { 
             out[0] = cs;
             brk_kval_vec.emplace_back(cs.get_first_x());
@@ -1247,12 +1274,7 @@ public:
                 return;
             }
             diff_from_curr_start = (int64_t)knot_si - prev_knot_ei;
-            if(abs(diff_from_curr_start) > _max) _max = abs(diff_from_curr_start);
-            
             brk_diff_vec.emplace_back(add_bit_based_on_sign(diff_from_curr_start));
-            
-            if(brk_diff_vec[brk_diff_vec.size()-1] > bit_max) 
-                bit_max = brk_diff_vec[brk_diff_vec.size()-1];
             
             prev_knot_ei = (int64_t)knot_ei;
             if(DEBUG_PRINT){
@@ -1280,11 +1302,11 @@ public:
             brk_sa_indx_vec.emplace_back(knot_si);
             diff_from_curr_start = (int64_t)knot_si - prev_knot_ei;
             brk_diff_vec.emplace_back(add_bit_based_on_sign(diff_from_curr_start));
-            if(DEBUG_PRINT){
-                cout<<"Last entry rank: "<<knot_si - epsilon<<endl;
-                cout<<"prev knot ei: "<<prev_knot_ei
-                    <<" diff_from_curr: "<<diff_from_curr_start<<endl;
-            }
+            // if(DEBUG_PRINT){
+            //     cout<<"Last entry rank: "<<knot_si - epsilon<<endl;
+            //     cout<<"prev knot ei: "<<prev_knot_ei
+            //         <<" diff_from_curr: "<<diff_from_curr_start<<endl;
+            // }
         }
         index_size = brk_kval_vec.size();
 
@@ -1303,8 +1325,9 @@ public:
     void build_rep_stretch_pla_index(const RandomIt &begin, 
         const uint64_t lookup_count,
         int64_t kmer_size){
-        vector<uint64_t>  brk_sa_indx_vec, brk_kval_vec;
-        vector<int64_t> y_diff_vec;
+        vector<DataType> brk_kval_vec;
+        vector<uint64_t> brk_sa_indx_vec;
+        vector<uint64_t> y_diff_vec;
         bool isFirst = true;
         int64_t prev_knot_ei=0, diff_from_curr_start;
         vector<canonical_segment> out(1);

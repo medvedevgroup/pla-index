@@ -28,8 +28,8 @@ int main(int argc, char **argv){
     suffix_array<int64_t> sa;
     sa.Load(gn_fn, sa_fn);
     sa.set_kmer_size(kmer_size);
-
-    pla_index pla(eps, is_fast_rank, sa.size(), it);
+    
+    pla_index<int64_t> pla(eps, is_fast_rank, sa.size(), it);
 
     auto s1 = std::chrono::system_clock::now();
     pla.build_index(sa.begin(), lookup_count, sa.get_kmer_size());
