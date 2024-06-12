@@ -30,6 +30,8 @@ inline omp_int_t omp_get_max_threads() { return 1; }
 #include <stdexcept>
 #include <type_traits>
 
+#define DEBUG_PRINT_PLA 1
+
 template<typename T>
 using LargeSigned = typename std::conditional_t<std::is_floating_point_v<T>,
                                                 long double,
@@ -309,6 +311,12 @@ public:
         int64_t knot_ei = round(int64_t(rectangle[1].y)+
                     (uint64_t(max_slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
                     /(double)max_slope.dx));
+        // auto knot_si = round(rectangle[1].y +
+        //             (max_slope.dy*(knot_start-rectangle[1].x))
+        //             /(double)max_slope.dx);
+        // auto knot_ei = round(rectangle[1].y+
+        //             (max_slope.dy)*((knot_end-rectangle[1].x)
+        //             /(double)max_slope.dx));
 
         return {knot_si, knot_ei};
     }
@@ -382,8 +390,8 @@ public:
     }
 
     int64_t Pred_idx(int64_t brk_beg_sa_indx, int64_t brk_end_sa_indx,
-                uint64_t query_val, uint64_t brk_beg_kval, 
-                uint64_t brk_end_kval, int64_t eps){
+                X query_val, X brk_beg_kval, 
+                X brk_end_kval, int64_t eps){
         return round(brk_beg_sa_indx + 
                     (brk_end_sa_indx - brk_beg_sa_indx)*
                     ((uint64_t(query_val) - uint64_t(brk_beg_kval)) /
@@ -431,7 +439,7 @@ size_t make_segmentation_rep_pla(int64_t n, int64_t epsilon, Fin in, Fout out, F
     opt.add_point(p.first, p.second+epsilon, occurenceCount);
     
     bool isForcedKnot = false, isSlopeIssuePresent = false;
-    int64_t issueKmer = -1;
+    X issueKmer = -1;
     bool isSlopeOk = false;
     while(!isSlopeOk){
         for (int64_t i = start; i < n; ++i) {
@@ -452,7 +460,7 @@ size_t make_segmentation_rep_pla(int64_t n, int64_t epsilon, Fin in, Fout out, F
             if(isSlopeIssuePresent && p.first == issueKmer){
                 isSlopeIssuePresent = false;
                 isSlopeOk = true;
-                OptimalPiecewiseLinearModel<int64_t, uint64_t>::CanonicalSegment cs = opt.get_segment();
+                auto cs = opt.get_segment();
                 
                 if(cs.isSlopeAtHalfPoint_repeat(issueKmer, epsilon)){
                 
@@ -499,7 +507,7 @@ size_t make_segmentation_rep_pla(int64_t n, int64_t epsilon, Fin in, Fout out, F
             
             if (!isIncluded) {
                 isSlopeOk = true;
-                OptimalPiecewiseLinearModel<int64_t, uint64_t>::CanonicalSegment cs = opt.get_segment();
+                auto cs = opt.get_segment();
                 
                 if(cs.isSlopeAtHalfPoint_repeat(p.first, epsilon)){
                     uint64_t chk_idx= opt.seg_start_indx;
@@ -543,7 +551,7 @@ size_t make_segmentation_rep_pla(int64_t n, int64_t epsilon, Fin in, Fout out, F
             }
         }
         // have to check for the last segment whether slope is ok
-        OptimalPiecewiseLinearModel<int64_t, uint64_t>::CanonicalSegment cs = opt.get_segment();
+        auto cs = opt.get_segment();
         isSlopeOk = true;
         if(cs.isSlopeAtHalfPoint_repeat(p.first, epsilon)){
         //if(1){
@@ -586,6 +594,17 @@ size_t make_segmentation_rep_pla(int64_t n, int64_t epsilon, Fin in, Fout out, F
     return c;
 }
 
+
+inline std::string to_decimal_string_pla(__int128 num) {
+    std::string str;
+    do {
+        int digit = num % 10;
+        str = std::to_string(digit) + str;
+        num = (num - digit) / 10;
+    } while (num != 0);
+    return str;
+}
+
 template<typename Fin, typename Fout, typename Ferr>
 size_t make_segmentation_basic_pla(int64_t n, int64_t epsilon, Fin in, Fout out, Ferr GetErr) {
     // std::cout<<"start of segment: "<<n<<" "<<epsilon<<std::endl;
@@ -594,6 +613,8 @@ size_t make_segmentation_basic_pla(int64_t n, int64_t epsilon, Fin in, Fout out,
 
     using X = typename std::invoke_result_t<Fin, size_t>::first_type;
     using Y = typename std::invoke_result_t<Fin, size_t>::second_type;
+    std::cout<<"X size: "<<sizeof(X)<<" Y size: "<<sizeof(Y)<<std::endl;
+    X test_val = 393137139353168619433676;
     size_t c = 0;// count variable
     size_t start = 0;
     
@@ -628,7 +649,7 @@ size_t make_segmentation_basic_pla(int64_t n, int64_t epsilon, Fin in, Fout out,
     // vector<int64_t> range_start_vec;
     // vector<int64_t> range_end_vec;
     bool isForcedKnot = false, isSlopeIssuePresent = false;
-    int64_t issueKmer = 0;
+    X issueKmer = 0;
     bool isSlopeOk = false;
     while(!isSlopeOk){
         for (int64_t i = start; i < n; ++i) {
@@ -641,7 +662,7 @@ size_t make_segmentation_basic_pla(int64_t n, int64_t epsilon, Fin in, Fout out,
                 while(1){
                     p = in(start);
                     if(p.first != -1){
-                        int64_t temp = p.first;
+                        X temp = p.first;
                         while (1)
                         {
                             start--;
@@ -681,7 +702,29 @@ size_t make_segmentation_basic_pla(int64_t n, int64_t epsilon, Fin in, Fout out,
             if (!isIncluded) {
                 
                 isSlopeOk = true;
-                OptimalPiecewiseLinearModel<int64_t, uint64_t>::CanonicalSegment cs = opt.get_segment();
+                auto cs = opt.get_segment();
+
+                if(DEBUG_PRINT_PLA && cs.get_first_x() == test_val){
+                    uint64_t chk_idx= opt.seg_start_indx;
+                    auto [knot_si, knot_ei] = cs.get_knot_intersection_basic(cs.get_last_x(), epsilon);
+                    
+                    auto prev = in(chk_idx);
+                    uint64_t prev_seed = prev.first;
+                    std::cout<<"knot si: "<<knot_si<<" knot ei: "<<knot_ei
+                        <<" \nlast x: "<<to_decimal_string_pla(cs.get_last_x())<<std::endl;
+                    for(size_t chk_idx=opt.seg_start_indx; chk_idx<i-occurenceCount; chk_idx++){
+                        auto point = in(chk_idx);
+                        if(point.first == prev_seed || point.first == -1) continue;
+                        int64_t pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
+                                cs.get_first_x(), cs.get_last_x(), epsilon);
+                        if(pred < 0) pred = 0;
+                        int64_t err1 = GetErr(chk_idx, pred);
+                        int64_t err2 = chk_idx - pred;
+                        prev_seed = point.first;
+                        std::cout<<"i: "<<chk_idx<<" kmer: "<<to_decimal_string_pla(point.first)
+                            <<" e1: "<<err1<<" e2: "<<err2<<std::endl;
+                    }
+                }
                 
                 if(cs.isSlopeAtHalfPoint_basic(cs.get_last_x())){
                     
@@ -723,7 +766,7 @@ size_t make_segmentation_basic_pla(int64_t n, int64_t epsilon, Fin in, Fout out,
                     while(1){
                         p = in(start);
                         if(p.first != -1){
-                            int64_t temp = p.first;
+                            X temp = p.first;
                             while (1)
                             {
                                 start--;
@@ -754,7 +797,7 @@ size_t make_segmentation_basic_pla(int64_t n, int64_t epsilon, Fin in, Fout out,
             }
         }
         // have to check for the last segment whether slope is ok
-        OptimalPiecewiseLinearModel<int64_t, uint64_t>::CanonicalSegment cs = opt.get_segment();
+        auto cs = opt.get_segment();
         isSlopeOk = true;
         if(cs.isSlopeAtHalfPoint_basic(cs.get_last_x())){
             

@@ -5,9 +5,10 @@
 #include "cmdline.hpp"
 
 using namespace std::chrono;
+using KmerType = SignType<int64_t>;
 
 void LoadQuery(const std::string &query_file, std::vector<std::string>& query_kmers_vec, 
-        std::vector<size_t>& query_kmerVals, suffix_array<int64_t> &sa){
+        std::vector<KmerType>& query_kmerVals, suffix_array<int64_t> &sa){
     std::ifstream queryFile(query_file.c_str());
     std::string line, kmer;
     int indx = 0;
@@ -50,8 +51,10 @@ int main(int argc, char **argv){
     pla_index<int64_t> pla(is_rank_query);
     pla.Load(indx_fn, sa);
 
+    
+
     std::vector<std::string> query_kmers_vec;
-    std::vector<size_t> query_kmerVals;
+    std::vector<KmerType> query_kmerVals;
     
     LoadQuery(query_fn, query_kmers_vec, query_kmerVals, sa);
     int64_t nQueries = query_kmers_vec.size();

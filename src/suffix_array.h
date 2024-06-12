@@ -3,10 +3,15 @@
 #include <string>
 #include "utils/util.hpp"
 
+template<typename T>
+using DataSize = typename std::conditional_t<(sizeof(T) < 8), 
+                        int64_t, __int128>;
+
 template <typename T>
 class suffix_array {
 private:
-    std::vector<T> sa;
+    using KmerType = DataSize<T>;
+    std::vector<uint64_t> sa;
     std::vector<char> str;
     size_t fSize;
     int64_t kmer_size;
@@ -14,11 +19,11 @@ private:
 public:
     class Iterator {
     private:
-        typename std::vector<T>::iterator it;
+        typename std::vector<uint64_t>::iterator it;
         suffix_array& sa;
 
     public:
-        Iterator(typename std::vector<T>::iterator iter, suffix_array& sa) 
+        Iterator(typename std::vector<uint64_t>::iterator iter, suffix_array& sa) 
                 : it(iter), sa(sa) {}
 
         // Overload prefix increment operator (++it)
@@ -69,7 +74,7 @@ public:
         }
 
         // Optionally, overload dereference operator (*it)
-        T operator*() {
+        KmerType operator*() {
             // std::cout<<"iterator val: "<<*it
             // <<" "<<sa.size()<<std::endl;
 
@@ -77,19 +82,19 @@ public:
             // return *it;
         }
 
-        T operator[](std::ptrdiff_t index) const{
+        KmerType operator[](std::ptrdiff_t index) const{
             return sa.GetValForIterator(*(it + index));
             // return *(it + index);
         }
 
         int64_t rank_of_last_entry()const{
             size_t indx = sa.size()-1;
-            int64_t val;
+            KmerType val;
             while(1){
                 val = sa[indx--];
                 if(val != -1) break;
             }
-            int64_t temp;
+            KmerType temp;
             while(1){
                 temp = sa[indx];
                 if(temp != val) return indx+1;
@@ -101,7 +106,7 @@ public:
     };
 
     // Overloading the [] operator
-    T operator[](std::size_t index) const{
+    KmerType operator[](std::size_t index) const{
         if (index < 0 ||  index >= sa.size()) {
             throw std::out_of_range("Index out of range");
         }
@@ -117,7 +122,7 @@ public:
     }
 
     // Additional member functions for the vector class
-    void push_back(const T& value) {
+    void push_back(const KmerType& value) {
         sa.push_back(value);
     }
 
@@ -125,25 +130,25 @@ public:
         return sa.size();
     }
 
-    const int64_t GetKmerValAtSAIndx(const int64_t i) const{
+    const KmerType GetKmerValAtSAIndx(const int64_t i) const{
         return GetKmerVal(GetKmerAtIndex(i));
     }
 
-    const int64_t get_largest() const{
+    const KmerType get_largest() const{
         uint64_t last_idx = fSize-1;
         while(GetKmerValAtSAIndx(last_idx) == -1) last_idx--;
         return GetKmerValAtSAIndx(last_idx);
     }
 
-    inline const T get_sa_val(uint64_t idx) const {
+    inline const KmerType get_sa_val(uint64_t idx) const {
         return sa[idx];
     }
 
-    inline const int64_t GetKmerVal(const string &s) const{
+    inline const KmerType GetKmerVal(const string &s) const{
         // if we have a smaller suffix than k-mer size,
         // we want to ignore it so that it never becomes a breakpoint
         if(s.compare("-1") == 0) return -1; 
-        int64_t  val=0;
+        KmerType  val=0;
         int i=0;
         while(s[i]){
             val=val<<2;
@@ -173,21 +178,31 @@ public:
         return "-1"; // substring size < k: ignore these
     }
 
-    const int64_t GetValForIterator(int64_t i){
+    const KmerType GetValForIterator(int64_t i){
         return GetKmerVal(GetKmerAtSAIndex_It(i));
     }
     
+    inline std::string to_decimal_string_sa(__int128 num) const {
+        std::string str;
+        do {
+            int digit = num % 10;
+            str = std::to_string(digit) + str;
+            num = (num - digit) / 10;
+        } while (num != 0);
+        return str;
+    }
     
-    const int64_t BinarySearch(const std::string &s, int64_t lo, int64_t hi, bool isFirstIndexReturned) const
+    const int64_t BinarySearch(const std::string &s, int64_t lo, int64_t hi,
+         bool isFirstIndexReturned) const
     {
         int64_t mid, idx, nLcp, gLcp, loLcp = 0, hiLcp = 0;
         char ch = ' ';
         while(1){
             // nLcp = min(loLcp, hiLcp);  
             // cout<<lo<<" "<<(lo+hi)/2<<" "<<hi<<endl;
-            // std::cout<<GetKmerValAtSAIndx(lo)<<" "
-            // <<GetKmerVal(s)<<" "
-            // <<GetKmerValAtSAIndx(hi)<<endl;
+            // std::cout<<to_decimal_string_sa(GetKmerValAtSAIndx(lo))<<" "
+            // <<to_decimal_string_sa(GetKmerVal(s))<<" "
+            // <<to_decimal_string_sa(GetKmerValAtSAIndx(hi))<<endl;
             nLcp = loLcp < hiLcp ? loLcp : hiLcp;      
             if(hi - lo <= 1){
                 for(int64_t i=lo; i<=hi; i++){
@@ -271,7 +286,7 @@ public:
     void LoadSA(std::string sa_file){
         sa.resize(fSize);
         FILE *fp = fopen(sa_file.c_str(), "rb");
-        int err = fread(&sa[0], sizeof(int64_t), fSize, fp);
+        int err = fread(&sa[0], sizeof(uint64_t), fSize, fp);
         fclose(fp);
     }
 

@@ -33,7 +33,7 @@ add_executable(create_queries
     src/CreateQueries.cpp
 )
 
-# add_executable(unit_test
-#     interim/unit_test.cpp
-# )
-# target_link_libraries(unit_test PUBLIC pla)
+add_executable(unit_test
+    interim/unit_test.cpp
+)
+target_link_libraries(unit_test PUBLIC pla)
