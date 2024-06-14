@@ -69,6 +69,70 @@ class dac_vector_dp
         overflow_bv_rank1 m_overflow_rank;
         std::vector<int_vector<>> m_data;
         std::vector<size_t> m_offsets;
+        std::vector<int> bit_sizes;
+        std::vector<uint64_t> level_counter_vec;
+
+        
+        // template <typename DataType>
+        // uint64_t get_dac_level(DataType val){
+        //     uint64_t hi = val >> 64;
+        //     uint64_t lo = val;
+        //     int retval[3];
+        //     retval[0] = hi == 0 ? 64 : __builtin_clzll(hi);
+        //     retval[1] = lo == 0 ? 128 : __builtin_clzll(lo)+64;
+        //     retval[2] = 128;
+        //     int idx = !hi + ((!lo)&(!hi));
+        //     uint64_t bits_needed = 128 - retval[idx];
+        //     if(!bits_needed) return 0; // 0th level
+        //     uint64_t level = 0;
+        //     uint64_t dac_bits = 0;
+        //     for(size_t i=0; i<dac_level_width_vec.size(); i++){
+        //         dac_bits += dac_level_width_vec[i];
+        //         if(dac_bits >= bits_needed) return i;
+        //     }
+        // }
+        
+        // motivation: https://stackoverflow.com/a/28433850
+        template <typename DataType>
+        uint64_t get_bit_count(DataType val){
+            uint64_t hi = val >> 64;
+            uint64_t lo = val;
+            int retval[3];
+            retval[0] = hi == 0 ? 64 : __builtin_clzll(hi);
+            retval[1] = lo == 0 ? 128 : __builtin_clzll(lo)+64;
+            retval[2] = 128;
+            int idx = !hi + ((!lo)&(!hi));
+            uint64_t bits_needed = 128 - retval[idx];
+            return bits_needed;
+        }
+    
+
+        template <typename Container>
+        void construct_count_vec(
+                const std::vector<int>& bit_sizes,
+                Container&& c)
+        {
+            for(size_t i=0; i<bit_sizes.size(); i++){
+                level_counter_vec.emplace_back(0);
+            }
+
+            for(size_t i=0; i<c.size(); i++){
+                size_t n_bits = get_bit_count(c[i]);
+                if(!n_bits){
+                    level_counter_vec[0]++;
+                    continue;
+                }
+                uint64_t level = 0;
+                uint64_t dac_bits = 0;
+                for(size_t i=0; i<bit_sizes.size(); i++){
+                    dac_bits += bit_sizes[i];
+                    if(dac_bits >= n_bits){
+                        level_counter_vec[i]++;
+                        continue;
+                    }
+                }
+            }
+        }
 
         template <typename Container>
         void construct_level(
@@ -214,7 +278,7 @@ class dac_vector_dp
                     }
                 }
             }
-            std::vector<int> bit_sizes;
+            
             int b = 0, lvl = max_levels;
             while (nxt[b][lvl] != -1) {
                 b = nxt[b][lvl];
@@ -223,25 +287,34 @@ class dac_vector_dp
             }
             assert(bit_sizes.size() <= max_levels);
 
-            size_t total_overflow_size = 0;
-            for (size_t i = 0; i < c.size(); ++i) {
-                size_t b = 0;
-                int msb = bits::hi(c[i]);
-                ++total_overflow_size;
-                while (b < bit_sizes.size() && msb >= bit_sizes[b]) {
-                    ++b;
-                    ++total_overflow_size;
-                }
-            }
+            // size_t total_overflow_size = 0;
+            // for (size_t i = 0; i < c.size(); ++i) {
+            //     size_t b = 0;
+            //     int msb = bits::hi(c[i]);
+            //     ++total_overflow_size;
+            //     while (b < bit_sizes.size() && msb >= bit_sizes[b]) {
+            //         ++b;
+            //         ++total_overflow_size;
+            //     }
+            // }
 
-            m_data.resize(bit_sizes.size());
-            m_overflow_tmp.resize(total_overflow_size);
-            construct_level(0, 0, bit_sizes, c);
+            // temp add
+            std::cout<<"Insde dac vec\n";
+            for(size_t i=0; i<bit_sizes.size(); i++){
+                std::cout<<bit_sizes[i]<<" ";
+            }
+            std::cout<<std::endl;
+            construct_count_vec(bit_sizes, c);
+
+            // m_data.resize(bit_sizes.size());
+            // m_overflow_tmp.resize(total_overflow_size);
+            // construct_level(0, 0, bit_sizes, c);
         }
 
         //! The number of levels in the dac_vector.
         size_t levels() const {
-            return m_data.size();
+            // return m_data.size();
+            return bit_sizes.size();
         }
 
         //! The number of elements in the dac_vector.
@@ -294,7 +367,8 @@ class dac_vector_dp
         inline void get_bit_per_level(std::vector<uint64_t>& level_vec){
             level_vec.resize(levels());
             for(size_t i=0; i<levels(); i++){
-                level_vec[i] = m_data[i].width();
+                // level_vec[i] = m_data[i].width();
+                level_vec[i] = bit_sizes[i];
             }
         }
 
@@ -319,7 +393,8 @@ class dac_vector_dp
         }
 
         inline uint64_t get_size_at_level(uint64_t i){
-            return m_data[i].size();
+            // return m_data[i].size();
+            return level_counter_vec[i];
         }
 
         inline void print_size_at_each_level(){

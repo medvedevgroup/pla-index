@@ -14,6 +14,7 @@
 #include "utils/essentials.hpp"
 #include "../sdsl/dac_vector.hpp"
 #include "../sdsl/sd_vector.hpp"
+#include "../sdsl/bits.hpp"
 
 using namespace std;
 
@@ -79,6 +80,10 @@ public:
     void process_level_vec(sdsl::dac_vector_dp<> &sa_diff_dac_vec){
         
         sa_diff_dac_vec.get_bit_per_level(dac_level_width_vec);
+        for(int i=0; i< dac_level_width_vec.size(); i++){
+            cout<<dac_level_width_vec[i]<<" ";
+        }
+        cout<<endl;
         
         for(size_t i=dac_level_width_vec.size()-1; i>=1; i--){
             dac_level_width_vec[i] -= dac_level_width_vec[i-1];
@@ -251,9 +256,36 @@ public:
             prefix_enc_block, prefix_enc_shift);
     }
     
+    uint64_t get_dac_level(DataType val){
+        // return 0;
+        uint64_t hi = val >> 64;
+        uint64_t lo = val;
+        int retval[3];
+        retval[0] = hi == 0 ? 64 : __builtin_clzll(hi);
+        retval[1] = lo == 0 ? 128 : __builtin_clzll(lo)+64;
+        retval[2] = 128;
+        // {
+        //     __builtin_clzll(hi),
+        //     __builtin_clzll(lo)+64,
+        //     128
+        // };
+        int idx = !hi + ((!lo)&(!hi));
+        uint64_t bits_needed = 128 - retval[idx];
+        if(!bits_needed) return 0; // 0th level
+        uint64_t level = 0;
+        uint64_t dac_bits = 0;
+        for(size_t i=0; i<dac_level_width_vec.size(); i++){
+            dac_bits += dac_level_width_vec[i];
+            if(dac_bits >= bits_needed) return i;
+        }
+        cout<<"Should not happen\n";
+        cout<<to_decimal_string(val)<<endl;
+        exit(-1);
+    }
     
     void encode_values_repeat(const vector<DataType> &brk_kval_vec, 
             sdsl::dac_vector_dp<> &sa_diff_dac_vec,
+            const vector<DataType> &sa_diff_vec, // for now using both diff dac and this
             int64_t lookup_count){
         sdsl::bit_vector dac_bv(index_size);
         
@@ -274,7 +306,7 @@ public:
             cout<<"ef width: "<<ef_width<<endl;
         }
         
-        max_data_ratio = ((1ULL << (max_bits)) - 1)/(index_size - 1);
+        max_data_ratio = ((DataType(1) << (max_bits)) - 1)/(index_size - 1);
         DataType largest = 0;
         for(int64_t i=0; i<index_size; i++){
             DataType diff = brk_kval_vec[i] - i*max_data_ratio;
@@ -328,6 +360,18 @@ public:
         // x + bit_for_2nd_level + ef_width + 1st level dac
         x_const_width = x_width + 1 + ef_width + dac_level_width_vec[0];
         
+        if(DEBUG_PRINT){
+            cout<<"width\n"
+                <<"x: "<<x_width
+                <<" y_diff: "<<dac_level_width_vec[0]
+                <<" pref: "<<pref_width
+                <<" ef: "<<ef_width
+                <<" x_const_width: "<<x_const_width
+                <<" mdr: "<<to_decimal_string(max_data_ratio)
+                <<" largest: "<<to_decimal_string(largest)
+                <<endl;
+        }
+        
         DataType prefix_count=0;
         uint64_t x_enc_block = 0, x_enc_shift = 0, prefix_enc_block=0,
             prefix_enc_shift=0,dac_enc_block = 0, dac_enc_shift = 0;
@@ -341,13 +385,21 @@ public:
         for(size_t i=0; i<index_size; i++){
             
             DataType diff = brk_kval_vec[i] - i*max_data_ratio;
-            DataType val = add_bit_based_on_sign(diff);
+            DataType x_val = add_bit_based_on_sign(diff);
             uint64_t curr_level = 0;
             
-            enc_value(val, x_enc_vec, x_width, x_enc_block, x_enc_shift);
+            enc_value(x_val, x_enc_vec, x_width, x_enc_block, x_enc_shift);
             
             //enc whether to go to 2nd level
-            auto [level, element] = sa_diff_dac_vec.access_element(i);
+            // auto [level, element] = sa_diff_dac_vec.access_element(i);
+            // if(i > 15400)
+            //     cout<<i<<" "<<to_decimal_string(sa_diff_vec[i]);
+            uint64_t level = get_dac_level(sa_diff_vec[i]);
+            // if(level != level2){
+            //     cout<<"Not match: "<<i<<" "<<level<<" "<<level2<<endl;
+            // }
+            // if(i > 15400)
+            //     cout<<" "<<level<<" "<<dac_level_width_vec[level];
             uint64_t enc_level = level > curr_level ? 1:0;
             enc_value(enc_level, x_enc_vec, dac_width, x_enc_block, x_enc_shift);
             
@@ -357,7 +409,7 @@ public:
                     x_enc_shift);
             
             // encode lsbs of all level dac
-            enc_value(sa_diff_dac_vec[i]&dac_0_mask, x_enc_vec, 
+            enc_value(sa_diff_vec[i]&dac_0_mask, x_enc_vec, 
                 dac_level_width_vec[0], x_enc_block, x_enc_shift);
             
             if(level > 0){
@@ -371,7 +423,7 @@ public:
                 // the total bits needed
                 // that can be found out by adding the bit_width and number of elements 
                 // at that width in dac
-                int64_t val = sa_diff_dac_vec[i] >> dac_level_width_vec[curr_level];
+                DataType val = sa_diff_vec[i] >> dac_level_width_vec[curr_level];
                 while(1){
                     curr_level++;
                     enc_level = level > curr_level ? 1:0;
@@ -385,7 +437,7 @@ public:
                         dac_bvs[curr_level][dac_level_counter[curr_level]++] = enc_level;
                     }
                     else if(enc_level == 1){
-                        cout<<"enc level 1 found: "<<i<<" "<<sa_diff_dac_vec[i]
+                        cout<<"enc level 1 found: "<<i<<" "<<to_decimal_string(sa_diff_vec[i])
                             <<" curr level: "<<curr_level
                             <<" #dac level: "<<num_dac_levels<<endl;
                     }
@@ -393,6 +445,21 @@ public:
 
                     if(!enc_level) break;
                     val >>= dac_level_width_vec[curr_level];
+                }
+            }
+
+            if(DEBUG_PRINT){
+                if(i >= 3141063 && i <= 3141065){
+                    cout<<i<<" x_val: "<<to_decimal_string(brk_kval_vec[i])
+                        <<" written: "<<to_decimal_string(x_val)
+                        <<" mul: "<<to_decimal_string(i*max_data_ratio)
+                        <<" cv val: "<<y_range_beg.cv_access(i)
+                        <<" y_start[]: "<<y_range_beg.access(i, 
+                                    y_range_beg.cv_access(i), ef_width)
+                        <<" diff: "<<to_decimal_string(sa_diff_vec[i])
+                        <<" level: "<<level
+                        <<" curr_level: "<<curr_level
+                        <<endl;
                 }
             }
             
@@ -404,6 +471,8 @@ public:
                         prefix_enc_shift);
                 }
             }
+            // if(i > 15400)
+            //     cout<<" D\n";
         }
         // this ensures upto index_size-1 will be checked for the last entry
         enc_value(index_size-1, prefix_vec, pref_width, prefix_enc_block, 
@@ -623,7 +692,7 @@ public:
 
     inline int64_t predict(DataType q, DataType x1, DataType y1, 
                     DataType x2_x1, DataType y2) const{
-        return round(y1 + ((double)(q - x1)/x2_x1 )*(y2 - y1));
+        return round(y1 + ((q - x1)/double(x2_x1) )*(y2 - y1));
     }
 
     inline DataType get_val_64(uint64_t& pos, uint64_t& mask, uint64_t& width) const{
@@ -953,7 +1022,7 @@ public:
     {
         DataType mid, midVal, rest_val,
             block, shift, prev_x = -1, curr_x, 
-            rest_bits = x_const_width - x_width, mdr;
+            rest_bits = x_const_width - x_width, mdr, temp;
         uint64_t pos;
         const uint64_t x_total_width = x_width + rest_bits;
         uint64_t rest_mask = (1ULL << rest_bits) - 1;
@@ -967,14 +1036,18 @@ public:
                 pos = lo*x_total_width;
                 for (int64_t i = lo; i <= hi; i++)
                 {
-                    block = pos >> 6;
-                    shift = pos & 63;
-                    curr_x = get_val(pos, x_mask1, x_mask2, x_width1, x_width2);
-                    curr_x = get_signed_value(curr_x) + mdr;
-                    // if(DEBUG_PRINT){
-                    //     cout<<i<<" "<<lo<<" "<<hi<<" "<<x_total_width<<" "<<pos<<" "
-                    //     <<curr_x<<" "<<query_val<<endl;
-                    // }
+                    temp = get_val(pos, x_mask1, x_mask2, x_width1, x_width2);
+                    curr_x = get_signed_value(temp) + mdr;
+                    if(DEBUG_PRINT){
+                        cout<<i<<" "<<lo<<" "<<hi<<" "<<x_total_width
+                        <<" curr: "<<to_decimal_string(curr_x)
+                        <<" written: "<<to_decimal_string(temp)
+                        <<" mdr: "<<to_decimal_string(mdr)
+                        <<" q: "<<to_decimal_string(query_val)
+                        <<" m1: "<<x_mask1<<" m2: "<<x_mask2
+                        <<" val: "<<(1<<x_width1)<<" "<<x_width1
+                        <<endl;
+                    }
                     
                     if(curr_x > query_val) {
                         if(prev_x != -1){
@@ -992,7 +1065,12 @@ public:
                             
                             bv.ef1 = (rest_val>>1) & ef_mask;
                             bv.diff1 = rest_val >> (ef_width + 1);
-                                                      
+                            if(DEBUG_PRINT){
+                                cout<<"In bs x:\n";
+                                cout<<"diff1: "<<to_decimal_string(bv.diff1)
+                                    <<" ef1 "<<to_decimal_string(bv.ef1)
+                                    <<" extra: "<<to_decimal_string(bv.extra)<<endl;
+                            }
                         }
                         // if prev_x == -1, this means bv already has all the value it needs
                         bv.x2_x1 = curr_x - bv.x1;
@@ -1028,7 +1106,7 @@ public:
                     return;
                 }
                 cout<<"Not found\n";
-                cout<<uint64_t(query_val)<<endl;
+                cout<<to_decimal_string(query_val)<<endl;
                 exit(-1);
             } 
             mid = (lo + hi) >> 1;
@@ -1107,12 +1185,12 @@ public:
                 | (prefix_vec[block+1] << (64-shift) & pref_mask);
     
         
-        DataType x2, ef2, diff2,
+        DataType x2, ef2,
             is_sec_lvl_2, mdr = max_data_ratio*indx;
         
         uint64_t rest_bits = x_const_width - x_width;
         uint64_t rest_mask = (1ULL << rest_bits)-1;
-        uint64_t rest_val;
+        uint64_t rest_val, diff2;
         
         // s1 = std::chrono::system_clock::now();
         if(indx > 0){
@@ -1137,12 +1215,24 @@ public:
         bv.diff1 = rest_val >> (ef_width + 1);
 
         
-        // if(DEBUG_PRINT){
-            // cout<<"from prefix: x1: "<<bv.x1<<" query: "<<query_val
-            //     <<" x2: (<x1): "<<x2<<" indx1: "<<indx<<" indx2: "<<indx2
-            //     <<" bv ef1: "<<bv.ef1<<" diff1: "<<bv.diff1<<" islvlsec: "<<bv.extra
-            //     <<endl;
-        // }
+        if(DEBUG_PRINT){
+            cout<<"Before match\n"
+                <<"Query: "<<to_decimal_string(query_val)
+                <<" prefix index 1: "<<indx<<" index 2: "<<indx2<<endl
+                <<" mdr: "<<to_decimal_string(max_data_ratio)
+                <<" mdr*i1 val: "<<to_decimal_string(max_data_ratio * indx)
+                <<"\nbv x1: "<<to_decimal_string(bv.x1)<<" ef1: "<<to_decimal_string(bv.ef1)
+                    <<" diff1: "<<int64_t(bv.diff1)<<endl
+                <<"xw1: "<<x_width1<<" xw2: "<<x_width2
+                <<" xm1: "<<x_mask1<<" xm2: "<<x_mask2
+                <<" shift: "<<shift_bits<<" lp: "<<lp_bits
+                <<" x_width: "<<x_width
+                <<endl;
+            if(indx > 0){
+                cout<<"x2: "<<to_decimal_string(x2)<<" extra: "
+                    <<to_decimal_string(is_sec_lvl_2)<<" diff2: "<<diff2<<endl;
+            }
+        }
         
         // s1 = std::chrono::system_clock::now();
         if(bv.x1 == query_val){
@@ -1162,8 +1252,8 @@ public:
                 bv.extra = is_sec_lvl_2;
                 bv.brkpnt = indx - 1;
             }
-            int64_t knot_si = y_range_beg.access(bv.brkpnt, bv.ef1, ef_width);
-            int64_t knot_ei = bv.diff1;
+            DataType knot_si = y_range_beg.access(bv.brkpnt, bv.ef1, ef_width);
+            DataType knot_ei = bv.diff1;
             
             if(bv.extra){
                 int64_t curr_level = 0;
@@ -1178,12 +1268,14 @@ public:
                     pos = dac_indx*dac_width;
                     block = pos >> 6;
                     shift = pos & 63;
-                    int64_t temp = (shift + dac_width <= 64) 
+                    DataType temp = (shift + dac_width <= 64) 
                     ?   dac_level_vecs[curr_level][block]>>shift & dac_mask
                     :   (dac_level_vecs[curr_level][block]>>shift) 
                         | (dac_level_vecs[curr_level][block+1] << (64-shift) & dac_mask);
                     
                     knot_ei |= (temp << total_width);
+                    if(DEBUG_PRINT)
+                        cout<<dac_width<<" ei:"<<to_decimal_string(knot_ei)<<endl;
                     
                     total_width += dac_width;
                     
@@ -1194,8 +1286,18 @@ public:
             }
             knot_ei += knot_si;
             
-
             query_pred = predict(query_val, bv.x1, knot_si, bv.x2_x1, knot_ei) - epsilon;
+
+            if(DEBUG_PRINT){
+                cout<<"After query_pred\n"
+                    <<"x1: "<<to_decimal_string(bv.x1)
+                    <<" q: "<<to_decimal_string(query_val)
+                    <<" x2: "<<to_decimal_string(bv.x1 + bv.x2_x1)
+                    <<"\ny1: "<<to_decimal_string(knot_si)<<" y2: "<<to_decimal_string(knot_ei)
+                    <<" pred: "<<query_pred
+                    <<endl;
+                    
+            }
             
         }
         query_pred = std::clamp(query_pred, int64_t(0), int64_t(total_data_points) - 1);
@@ -1234,13 +1336,13 @@ public:
     }
 
     template<typename RandomIt>
-    int64_t get_pred_diff(const int64_t act_idx, int64_t pred_idx, 
+    int64_t get_pred_diff(const DataType act_idx, DataType pred_idx, 
         RandomIt& data) const{
         if(pred_idx > total_data_points) pred_idx = total_data_points-1;
         if(act_idx == pred_idx){
             return 0;
         }
-        int64_t lo, hi, mid, act_data = data[act_idx];
+        DataType lo, hi, mid, act_data = data[act_idx];
         if(act_idx < pred_idx){
             lo = act_idx;
             hi = pred_idx;
@@ -1394,31 +1496,38 @@ public:
 
     template<typename RandomIt>
     void build_rep_stretch_pla_index(const RandomIt &begin, 
-        const uint64_t lookup_count,
-        int64_t kmer_size){
+            const uint64_t lookup_count,
+            int64_t kmer_size){
         vector<DataType> brk_kval_vec;
         vector<uint64_t> brk_sa_indx_vec;
-        vector<uint64_t> y_diff_vec;
+        vector<DataType> y_diff_vec;
         bool isFirst = true;
-        int64_t prev_knot_ei=0, diff_from_curr_start;
+        DataType diff_from_curr_start;
         vector<canonical_segment> out(1);
 
         auto in_fun = [&](auto i) { return std::pair<DataType, uint64_t>(begin[i], i);};
             
-        auto out_fun = [&](auto cs, const int64_t last_x) { 
+        auto out_fun = [&](auto cs, const DataType last_x) { 
             out[0] = cs;
-            uint64_t curr_x = cs.get_first_x();
+            DataType curr_x = cs.get_first_x();
             brk_kval_vec.emplace_back(curr_x);
             
             auto [knot_si, knot_ei] = cs.get_knot_intersection_repeat(last_x, epsilon);      
             brk_sa_indx_vec.emplace_back((uint64_t)knot_si); 
             
-            diff_from_curr_start = int64_t(knot_ei) - int64_t(knot_si);
+            diff_from_curr_start = DataType(knot_ei) - DataType(knot_si);
+
+            if(brk_kval_vec.size() >= 3141063 && brk_kval_vec.size() <= 3141065){
+                cout<<"inside: "<<brk_kval_vec.size()
+                    <<" si: "<<to_decimal_string(knot_si)
+                    <<" ei: "<<to_decimal_string(knot_ei)
+                    <<" diff: "<<to_decimal_string(diff_from_curr_start)<<endl;
+            }
             
             y_diff_vec.emplace_back(diff_from_curr_start);
             
         };
-        auto get_err = [&](int64_t act_idx, int64_t pred_idx){
+        auto get_err = [&](DataType act_idx, DataType pred_idx){
             return get_pred_diff(act_idx, pred_idx, begin);
         };
 
@@ -1438,12 +1547,13 @@ public:
         sdsl::dac_vector_dp<> sa_diff_dac_vec(y_diff_vec);
         
         num_dac_levels = sa_diff_dac_vec.levels();
-        // cout<<"Number of dac levels: "<<num_dac_levels<<endl;
+        cout<<"Number of dac levels: "<<num_dac_levels<<endl;
         
         y_range_beg.encode(brk_sa_indx_vec.data(), brk_sa_indx_vec.size());
         shift_bits = 2 * kmer_size;
         
-        encode_values_repeat(brk_kval_vec, sa_diff_dac_vec, lookup_count);
+        encode_values_repeat(brk_kval_vec, sa_diff_dac_vec,
+            y_diff_vec, lookup_count);
         
         if(is_fast_rank) calc_index_bv(begin);
     }

@@ -24,6 +24,8 @@
 #include <stdint.h> // for uint64_t uint32_t declaration
 #include <iostream>// for cerr
 #include <cassert>
+
+// #include "uint128_t.hpp"
 #ifdef __BMI2__
 #include <immintrin.h>
 #endif
@@ -116,6 +118,16 @@ struct bits {
     	\sa sel, lo
     */
     static uint32_t hi(uint64_t x);
+
+    // //! Position of the most significant set bit the 128-bit word x
+    // //! ref: https://stackoverflow.com/a/28433850
+    // // added by Hasin
+    // /*! \param x 128-bit word
+    //     \return The position (in 0..127) of the most significant set bit
+    //             in `x` or 0 if x equals 0.
+    // 	\sa sel, lo
+    // */
+    // static int clz_u128 (uint128_t u);
 
     //! Calculates the position of the rightmost 1-bit in the 64bit integer x if it exists
     /*! \param x 64 bit integer.
@@ -385,6 +397,20 @@ inline uint32_t bits::_sel(uint64_t x, uint32_t i)
                 return 56+lt_sel[(((x>>56)&0xFFULL) + i - ((s>>40)&0xFF00ULL))&0x7FFULL];//byte 7;
     return 0;
 }
+
+
+// inline int bits::clz_u128 (uint128_t u) {
+//     if(u == 0) return 0;
+//     uint64_t hi = u>>64;
+//     uint64_t lo = u;
+//     int retval[3]={
+//         __builtin_clzll(hi),
+//         __builtin_clzll(lo)+64,
+//         128
+//     };
+//     int idx = !hi + ((!lo)&(!hi));
+//     return retval[idx];
+// }
 
 // using built-in method or
 // 64-bit version of 32-bit proposal of

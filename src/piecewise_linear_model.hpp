@@ -148,7 +148,7 @@ public:
         // std::cout<<"curr point: "<<x<<std::endl;
         
         Point p1{x, SY(y) + epsilon + occurenceCount -1};
-        Point p2{x, int64_t(y) - epsilon};
+        Point p2{x, SY(y) - epsilon};
         // if(x >= 2188 && x<= 2334){
         //     std::cout<<"["<<(int64_t)SY(y) + epsilon + occurenceCount -1<<", ";
         //     std::cout<<(int64_t)SY(y) - epsilon<<"]"<<std::endl;
@@ -296,6 +296,17 @@ public:
         c.first = x;
         return c;
     }
+
+    
+    inline std::string to_decimal_string_pla(__int128 num) {
+        std::string str;
+        do {
+            int digit = num % 10;
+            str = std::to_string(digit) + str;
+            num = (num - digit) / 10;
+        } while (num != 0);
+        return str;
+    }
     
     std::tuple<int64_t, int64_t> get_knot_intersection_basic(X knot_end, int64_t eps){
         if (one_point()){
@@ -306,10 +317,10 @@ public:
         X knot_start = first;
         auto max_slope = rectangle[3] - rectangle[1];
         int64_t knot_si = round(int64_t(rectangle[1].y) +
-                    (max_slope.dy*(__int128_t(knot_start)-__int128_t(rectangle[1].x)))
-                    /(double)max_slope.dx);
+                    (max_slope.dy)*((__int128_t(knot_start)-__int128_t(rectangle[1].x))
+                    /(double)max_slope.dx));
         int64_t knot_ei = round(int64_t(rectangle[1].y)+
-                    (uint64_t(max_slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
+                    ((max_slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
                     /(double)max_slope.dx));
         // auto knot_si = round(rectangle[1].y +
         //             (max_slope.dy*(knot_start-rectangle[1].x))
@@ -322,9 +333,13 @@ public:
     }
 
     
-    std::tuple<int64_t, int64_t> get_knot_intersection_repeat(X knot_end, int64_t eps){
+    std::tuple<X, X> get_knot_intersection_repeat(X knot_end, int64_t eps){
         if (one_point()){
-            int64_t knot_si  = rectangle[1].y;
+            X knot_si  = rectangle[1].y;
+            if(DEBUG_PRINT_PLA && (knot_si == 29398174 || knot_si == 29396412)){
+                std::cout<<"one point: "<<to_decimal_string_pla(knot_si)
+                    <<" "<<std::endl;
+            }
             return {knot_si, knot_si};
         }
         X knot_start = first;
@@ -334,21 +349,60 @@ public:
             auto p2 = Point{rectangle[2].x,  rectangle[2].y + eps};
             auto slope = p2-p1;
 
-            int64_t knot_si = rectangle[0].y - 2*eps;
-            int64_t knot_ei = round(int64_t(knot_si)+
-                    (uint64_t(slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
+            X knot_si = rectangle[0].y - 2*eps;
+            X knot_ei = round(__int128_t(knot_si)+
+                    (__int128_t(slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
                     /(double)slope.dx));
+            if(DEBUG_PRINT_PLA && (knot_si == 29398174 || knot_si == 29396412)){
+                std::cout<<"two point: "<<to_decimal_string_pla(knot_si)
+                    <<" "<<to_decimal_string_pla(knot_ei)<<std::endl;
+                for(int i=0; i<4; i++){
+                    std::cout<<to_decimal_string_pla(rectangle[i].x)
+                        <<" "<<to_decimal_string_pla(rectangle[i].y)<<std::endl;
+                }
+            }
             return {knot_si, knot_ei};
         }
 
         auto max_slope = rectangle[3] - rectangle[1];        
-        int64_t knot_si = round(int64_t(rectangle[1].y) +
-                    (max_slope.dy*(__int128_t(knot_start)-__int128_t(rectangle[1].x)))
-                    /(double)max_slope.dx);
-        int64_t knot_ei = round(int64_t(rectangle[1].y)+
-                    (uint64_t(max_slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
-                    /(double)max_slope.dx));
+        X knot_si = round(__int128_t(rectangle[1].y) +
+                    (__int128_t(max_slope.dy))*
+                        ((__int128_t(knot_start)-__int128_t(rectangle[1].x))
+                    /(long double)max_slope.dx));
+        X knot_ei = round(__int128_t(rectangle[1].y)+
+                    (__int128_t(max_slope.dy))*
+                        ((__int128_t(knot_end)-__int128_t(rectangle[1].x))
+                    /(long double)max_slope.dx));
         
+        if(DEBUG_PRINT_PLA && (knot_si == 29398174 || knot_si == 29396412)){
+            std::cout<<"regular point: "<<to_decimal_string_pla(knot_si)
+                <<" "<<to_decimal_string_pla(knot_ei)
+                <<" ks: "<<to_decimal_string_pla(knot_start)
+                <<" ke: "<<to_decimal_string_pla(knot_end)
+                <<std::endl;
+            std::cout<<((__int128_t(knot_start)-__int128_t(rectangle[1].x))
+                    /(long double)max_slope.dx)
+                    <<" "<<((__int128_t(max_slope.dy)*
+                        ((__int128_t(knot_start)-__int128_t(rectangle[1].x))
+                    /(long double)max_slope.dx)))
+                    
+                    <<" "<<to_decimal_string_pla(round(__int128_t(rectangle[1].y)+
+                            (__int128_t(max_slope.dy))*
+                        ((__int128_t(knot_start)-__int128_t(rectangle[1].x))
+                    /(long double)max_slope.dx)))
+                    
+                    <<" "<<to_decimal_string_pla(round(__int128_t(rectangle[1].y)+
+                            (__int128_t(max_slope.dy)*
+                        ((__int128_t(knot_start)-__int128_t(rectangle[1].x)))
+                    /(long double)max_slope.dx)))
+                    <<std::endl;
+
+            for(int i=0; i<4; i++){
+                std::cout<<to_decimal_string_pla(rectangle[i].x)
+                    <<" "<<to_decimal_string_pla(rectangle[i].y)<<std::endl;
+            }
+        }
+
         return {knot_si, knot_ei};
     }
 
@@ -358,12 +412,12 @@ public:
         }
         X knot_start = first;
         auto max_slope = rectangle[3] - rectangle[1];
-        double knot_si = int64_t(rectangle[1].y) +
-                    (max_slope.dy*(__int128_t(knot_start)-__int128_t(rectangle[1].x)))
-                    /(double)max_slope.dx;
-        double knot_ei = int64_t(rectangle[1].y)+
-                    (uint64_t(max_slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
-                    /(double)max_slope.dx);
+        double knot_si = __int128_t(rectangle[1].y) +
+                    (max_slope.dy)*((__int128_t(knot_start)-__int128_t(rectangle[1].x))
+                    /(long double)max_slope.dx);
+        double knot_ei = __int128_t(rectangle[1].y)+
+                    ((max_slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
+                    /(long double)max_slope.dx);
         double frac_slope = double(max_slope.dy)/double(max_slope.dx);
         bool is_frac_slope_half = (frac_slope - floor(frac_slope)) == 0.5;
         return is_frac_slope_half
@@ -376,12 +430,12 @@ public:
         }                
         X knot_start = first;
         auto max_slope = rectangle[3] - rectangle[1];
-        double knot_si = int64_t(rectangle[1].y) +
-                    (max_slope.dy*(__int128_t(knot_start)-__int128_t(rectangle[1].x)))
-                    /(double)max_slope.dx;
-        double knot_ei = int64_t(rectangle[1].y)+
-                    (uint64_t(max_slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
-                    /(double)max_slope.dx);
+        long double knot_si = __int128_t(rectangle[1].y) +
+                    (max_slope.dy)*((__int128_t(knot_start)-__int128_t(rectangle[1].x))
+                    /(long double)max_slope.dx);
+        long double knot_ei = __int128_t(rectangle[1].y)+
+                    (__int128_t(max_slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
+                    /(long double)max_slope.dx);
         double frac_slope = double(max_slope.dy)/ double(max_slope.dx);
         
         return (frac_slope - floor(frac_slope)) == 0.5 ||
@@ -389,17 +443,26 @@ public:
         
     }
 
-    int64_t Pred_idx(int64_t brk_beg_sa_indx, int64_t brk_end_sa_indx,
+    int64_t Pred_idx(X brk_beg_sa_indx, X brk_end_sa_indx,
                 X query_val, X brk_beg_kval, 
                 X brk_end_kval, int64_t eps){
         return round(brk_beg_sa_indx + 
                     (brk_end_sa_indx - brk_beg_sa_indx)*
-                    ((uint64_t(query_val) - uint64_t(brk_beg_kval)) /
-                    (double)(brk_end_kval - brk_beg_kval)) ) - eps;
+                    ((X(query_val) - X(brk_beg_kval)) /
+                    (long double)(brk_end_kval - brk_beg_kval)) ) - eps;
     }
     
 };
 
+inline std::string to_decimal_string_pla(__int128 num) {
+    std::string str;
+    do {
+        int digit = num % 10;
+        str = std::to_string(digit) + str;
+        num = (num - digit) / 10;
+    } while (num != 0);
+    return str;
+}
 
 
 template<typename Fin, typename Fout, typename Ferr>
@@ -409,6 +472,12 @@ size_t make_segmentation_rep_pla(int64_t n, int64_t epsilon, Fin in, Fout out, F
 
     using X = typename std::invoke_result_t<Fin, size_t>::first_type;
     using Y = typename std::invoke_result_t<Fin, size_t>::second_type;
+    
+    X right = 3751696595176469460;
+    X left = 459776853254875968;
+    left <<= 64;
+    X test_val = left | right;
+
     size_t c = 0;// count variable
     size_t start = 0;
     
@@ -461,25 +530,50 @@ size_t make_segmentation_rep_pla(int64_t n, int64_t epsilon, Fin in, Fout out, F
                 isSlopeIssuePresent = false;
                 isSlopeOk = true;
                 auto cs = opt.get_segment();
+
+                if(DEBUG_PRINT_PLA && cs.get_first_x() == test_val){
+                    X chk_idx= opt.seg_start_indx;
+                    auto [knot_si, knot_ei] = cs.get_knot_intersection_repeat(p.first, epsilon);
+                    auto prev = in(chk_idx);
+                    X prev_seed = prev.first;
+                    for(chk_idx = opt.seg_start_indx+1; chk_idx<i-occurenceCount+1; chk_idx++){
+                        auto point = in(chk_idx);
+                        if(point.first == prev_seed || point.first == -1) continue;
+                        X pred;
+                        pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
+                                cs.get_first_x(), p.first, epsilon);
+                        
+                        if(pred < 0) pred = 0;
+                        X err = GetErr(chk_idx, pred);
+                        if(err<0) err*= -1;
+                        std::cout<<"\nissue x: "<<to_decimal_string_pla(p.first)
+                            <<" knot start: "<<to_decimal_string_pla(cs.get_first_x())
+                            <<" curr x: "<<to_decimal_string_pla(point.first)
+                            <<" pred: "<<to_decimal_string_pla(pred)
+                            <<" err: "<<to_decimal_string_pla(err)<<std::endl;
+                        prev_seed = point.first;
+                        break;
+                    }
+                }
                 
                 if(cs.isSlopeAtHalfPoint_repeat(issueKmer, epsilon)){
                 
-                    uint64_t chk_idx= opt.seg_start_indx;
+                    X chk_idx= opt.seg_start_indx;
                     
                     auto [knot_si, knot_ei] = cs.get_knot_intersection_repeat(issueKmer, epsilon);
                 
                     auto prev = in(chk_idx);
-                    uint64_t prev_seed = prev.first;
+                    X prev_seed = prev.first;
                     for(chk_idx = opt.seg_start_indx+1; chk_idx<i-occurenceCount+1; chk_idx++){
                         auto point = in(chk_idx);
                         if(point.first == prev_seed || point.first == -1) continue;
-                        int64_t pred;
+                        X pred;
                         pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
                                 cs.get_first_x(), issueKmer, epsilon);
                         
                         if(pred < 0) pred = 0;
                         if(pred > chk_idx){
-                            int64_t err = GetErr(chk_idx, pred);
+                            X err = GetErr(chk_idx, pred);
                             
                             if(err<0) err*= -1;
                             if(err > epsilon){
@@ -504,26 +598,71 @@ size_t make_segmentation_rep_pla(int64_t n, int64_t epsilon, Fin in, Fout out, F
                 opt.seg_start_indx = i-occurenceCount+1;
             }
             isIncluded = opt.add_point(p.first, p.second+epsilon, occurenceCount);
+            if(DEBUG_PRINT_PLA && p.first == test_val){
+                auto cs = opt.get_segment();
+                std::cout<<"\nadd point: x: "<<to_decimal_string_pla(test_val)
+                    <<" y: "<<to_decimal_string_pla(p.second + epsilon)
+                    <<" occ: "<<occurenceCount
+                    <<" is included: "<<isIncluded
+                    <<" half point: "<<cs.isSlopeAtHalfPoint_repeat(p.first, epsilon)
+                    <<std::endl;
+            }
             
             if (!isIncluded) {
                 isSlopeOk = true;
                 auto cs = opt.get_segment();
-                
-                if(cs.isSlopeAtHalfPoint_repeat(p.first, epsilon)){
-                    uint64_t chk_idx= opt.seg_start_indx;
+
+                if(DEBUG_PRINT_PLA && cs.get_first_x() == test_val){
+                    X chk_idx = opt.seg_start_indx;
                     auto [knot_si, knot_ei] = cs.get_knot_intersection_repeat(p.first, epsilon);
                     auto prev = in(chk_idx);
-                    uint64_t prev_seed = prev.first;
+                    X prev_seed = prev.first;
+                    X pred = cs.Pred_idx(knot_si, knot_ei, prev.first, 
+                                cs.get_first_x(), p.first, epsilon);
+                    if(pred < 0) pred = 0;
+                    X ks_err = GetErr(chk_idx, pred);
+                    if(ks_err < 0) ks_err *= -1;
+
                     for(chk_idx = opt.seg_start_indx+1; chk_idx<i-occurenceCount+1; chk_idx++){
                         auto point = in(chk_idx);
                         if(point.first == prev_seed || point.first == -1) continue;
-                        int64_t pred;
+                        
+                        pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
+                                cs.get_first_x(), p.first, epsilon);
+                        
+                        if(pred < 0) pred = 0;
+                        X err = GetErr(chk_idx, pred);
+                        if(err<0) err*= -1;
+                        std::cout<<"\nx: "<<to_decimal_string_pla(point.first)
+                            <<" pred: "<<to_decimal_string_pla(pred)
+                            <<" err: "<<to_decimal_string_pla(err)
+                            <<" ksi: "<<to_decimal_string_pla(knot_si)
+                            <<" kei: "<<to_decimal_string_pla(knot_ei)
+                            <<" knot start: "<<to_decimal_string_pla(cs.get_first_x())
+                            <<" knot end: "<<to_decimal_string_pla(p.first)
+                            <<" slope hp: "<<cs.isSlopeAtHalfPoint_repeat(p.first, epsilon)
+                            <<" knot_start err: "<<to_decimal_string_pla(ks_err)
+                            <<std::endl;
+                        break;
+                        prev_seed = point.first;
+                    }
+                }
+                
+                if(cs.isSlopeAtHalfPoint_repeat(p.first, epsilon)){
+                    X chk_idx= opt.seg_start_indx;
+                    auto [knot_si, knot_ei] = cs.get_knot_intersection_repeat(p.first, epsilon);
+                    auto prev = in(chk_idx);
+                    X prev_seed = prev.first;
+                    for(chk_idx = opt.seg_start_indx+1; chk_idx<i-occurenceCount+1; chk_idx++){
+                        auto point = in(chk_idx);
+                        if(point.first == prev_seed || point.first == -1) continue;
+                        X pred;
                         pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
                                 cs.get_first_x(), p.first, epsilon);
                         
                         if(pred < 0) pred = 0;
                         if(pred > chk_idx){
-                            int64_t err = GetErr(chk_idx, pred);
+                            X err = GetErr(chk_idx, pred);
                             if(err<0) err*= -1;
                             if(err > epsilon){
                                 isSlopeOk = false;
@@ -555,20 +694,20 @@ size_t make_segmentation_rep_pla(int64_t n, int64_t epsilon, Fin in, Fout out, F
         isSlopeOk = true;
         if(cs.isSlopeAtHalfPoint_repeat(p.first, epsilon)){
         //if(1){
-            uint64_t chk_idx= opt.seg_start_indx;
+            X chk_idx= opt.seg_start_indx;
             auto [knot_si, knot_ei] = cs.get_knot_intersection_repeat(p.first, epsilon);
             
             auto prev = in(chk_idx);
-            uint64_t prev_seed = prev.first;
+            X prev_seed = prev.first;
             for(chk_idx = opt.seg_start_indx+1; chk_idx<n-occurenceCount; chk_idx++){
                 auto point = in(chk_idx);
                 if(point.first == prev_seed || point.first == -1) continue;
-                int64_t pred;
+                X pred;
                 pred = cs.Pred_idx(knot_si, knot_ei, point.first, 
                         cs.get_first_x(), p.first, epsilon);
                 if(pred < 0) pred = 0;            
                 if(pred > chk_idx){
-                    int64_t err = GetErr(chk_idx, pred);
+                    X err = GetErr(chk_idx, pred);
                     if(err<0) err*= -1;
                     if(err > epsilon){
                         isSlopeOk = false;
@@ -595,15 +734,6 @@ size_t make_segmentation_rep_pla(int64_t n, int64_t epsilon, Fin in, Fout out, F
 }
 
 
-inline std::string to_decimal_string_pla(__int128 num) {
-    std::string str;
-    do {
-        int digit = num % 10;
-        str = std::to_string(digit) + str;
-        num = (num - digit) / 10;
-    } while (num != 0);
-    return str;
-}
 
 template<typename Fin, typename Fout, typename Ferr>
 size_t make_segmentation_basic_pla(int64_t n, int64_t epsilon, Fin in, Fout out, Ferr GetErr) {
