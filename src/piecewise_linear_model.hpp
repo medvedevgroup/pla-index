@@ -303,9 +303,9 @@ public:
         }
         X knot_start = first;
         auto max_slope = rectangle[3] - rectangle[1];
-        int64_t knot_si = round(int64_t(rectangle[1].y) +
-                    (max_slope.dy*(__int128_t(knot_start)-__int128_t(rectangle[1].x)))
-                    /(double)max_slope.dx);
+        int64_t knot_si = round(int64_t(rectangle[1].y)+
+                    (uint64_t(max_slope.dy))*((__int128_t(knot_start)-__int128_t(rectangle[1].x))
+                    /(double)max_slope.dx));
         int64_t knot_ei = round(int64_t(rectangle[1].y)+
                     (uint64_t(max_slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
                     /(double)max_slope.dx));
@@ -334,9 +334,9 @@ public:
         }
 
         auto max_slope = rectangle[3] - rectangle[1];        
-        int64_t knot_si = round(int64_t(rectangle[1].y) +
-                    (max_slope.dy*(__int128_t(knot_start)-__int128_t(rectangle[1].x)))
-                    /(double)max_slope.dx);
+        int64_t knot_si = round(int64_t(rectangle[1].y)+
+                    (uint64_t(max_slope.dy))*((__int128_t(knot_start)-__int128_t(rectangle[1].x))
+                    /(double)max_slope.dx));
         int64_t knot_ei = round(int64_t(rectangle[1].y)+
                     (uint64_t(max_slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
                     /(double)max_slope.dx));
@@ -351,8 +351,9 @@ public:
         X knot_start = first;
         auto max_slope = rectangle[3] - rectangle[1];
         double knot_si = int64_t(rectangle[1].y) +
-                    (max_slope.dy*(__int128_t(knot_start)-__int128_t(rectangle[1].x)))
-                    /(double)max_slope.dx;
+                    (uint64_t(max_slope.dy))*
+                        ((__int128_t(knot_start)-__int128_t(rectangle[1].x))
+                    /(double)max_slope.dx);
         double knot_ei = int64_t(rectangle[1].y)+
                     (uint64_t(max_slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
                     /(double)max_slope.dx);
@@ -369,8 +370,9 @@ public:
         X knot_start = first;
         auto max_slope = rectangle[3] - rectangle[1];
         double knot_si = int64_t(rectangle[1].y) +
-                    (max_slope.dy*(__int128_t(knot_start)-__int128_t(rectangle[1].x)))
-                    /(double)max_slope.dx;
+                    (uint64_t(max_slope.dy))*
+                        ((__int128_t(knot_start)-__int128_t(rectangle[1].x))
+                    /(double)max_slope.dx);
         double knot_ei = int64_t(rectangle[1].y)+
                     (uint64_t(max_slope.dy))*((__int128_t(knot_end)-__int128_t(rectangle[1].x))
                     /(double)max_slope.dx);
